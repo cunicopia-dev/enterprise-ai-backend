@@ -30,8 +30,7 @@ class OllamaProvider:
             # Use the ollama.chat function with the conversation history
             response = await ollama.AsyncClient().chat(
                 model=self.model_name,
-                messages=messages,
-                temperature=temperature
+                messages=messages
             )
             
             return response
@@ -62,8 +61,7 @@ class OllamaProvider:
             # Use the ollama.generate function for simpler prompts
             response = await ollama.AsyncClient().generate(
                 model=self.model_name,
-                prompt=prompt,
-                temperature=temperature
+                prompt=prompt
             )
             
             # Format the response to match the chat response format
