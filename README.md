@@ -338,3 +338,54 @@ If you encounter problems with chat history:
 1. Ensure the `chats` directory exists and is writable
 2. Check for file permission issues if running in Docker
 3. Verify that your custom chat IDs follow the allowed format
+
+## Streamlit Frontend
+
+This project includes a Streamlit-based web interface that connects to the FastAPI backend.
+
+### Features
+
+- Modern UI with dark mode and responsive design
+- Chat history management with sidebar navigation
+- Support for custom chat IDs
+- Real-time interaction with the FastAPI backend
+- Delete and manage multiple chat sessions
+
+### Running the Streamlit Frontend
+
+#### Local Development
+
+Install Streamlit dependencies:
+
+```bash
+pip install -r requirements.streamlit.txt
+```
+
+Run the Streamlit app:
+
+```bash
+cd streamlit
+chmod +x run.sh
+./run.sh
+```
+
+The Streamlit interface will be available at http://localhost:8501
+
+#### Using Docker Compose
+
+To run both the FastAPI backend and Streamlit frontend together:
+
+```bash
+docker-compose up
+```
+
+- FastAPI backend: http://localhost:8000
+- Streamlit frontend: http://localhost:8501
+
+### Extending the Streamlit Interface
+
+The Streamlit interface is designed to be easily customizable. You can modify:
+
+- The UI appearance in the custom CSS section
+- Add new features by extending the sidebar or main area
+- Connect to different backends by changing the API_URL environment variable
