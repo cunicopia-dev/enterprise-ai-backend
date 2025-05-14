@@ -3,9 +3,26 @@ FROM python:3.13-slim
 WORKDIR /app
 
 COPY requirements.txt .
-COPY src/. .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.fastapi.txt
+
+# Create directories for persistent data
+RUN mkdir -p /app/chats
+
+# Copy source code
+COPY src/. src/
+
+# Copy system prompt if exists or create default
+COPY system_prompt.txt* ./
+RUN if [ ! -f system_prompt.txt ]; then \
+    echo "You are a helpful AI assistant with expertise in programming, technology, and general knowledge." > system_prompt.txt; \
+fi
+
+# Set environment variables for persistence
+ENV SYSTEM_PROMPT_FILE="/app/system_prompt.txt"
+ENV CHAT_HISTORY_DIR="/app/chats"
 
 EXPOSE 8000
 
-CMD ["python", "main.py"]
+VOLUME ["/app/chats"]
+
+CMD ["python", "src/main.py"]
