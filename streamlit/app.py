@@ -21,108 +21,159 @@ st.set_page_config(
     }
 )
 
-# Custom CSS based on dark/light mode
-dark_mode = st.session_state.get("dark_mode", True)
+# Initialize dark mode in session state
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = True
 
-if dark_mode:
-    user_bg = "#2b313e"
-    bot_bg = "#475063"
-    text_color = "#ffffff"
-    header_color = "#9ca3af"
+# Define a simpler color palette that works with Streamlit's defaults
+if st.session_state.dark_mode:
+    # Dark theme with black/red compatibility
+    primary_color = "#ff4b4b"  # Streamlit red
+    bg_color = "#0e1117"       # Dark background
+    sidebar_bg = "#1a1c24"     # Slightly lighter dark
+    text_color = "#f0f2f6"     # Light gray text
+    muted_text = "#9ca1aa"     # Muted text
+    user_msg_bg = "#262730"    # Dark gray
+    bot_msg_bg = "#1e2128"     # Slightly lighter
+    code_bg = "#0e1117"        # Code background
 else:
-    user_bg = "#e6f3ff"
-    bot_bg = "#f0f0f0"
-    text_color = "#333333"
-    header_color = "#666666"
+    # Light theme with red accents
+    primary_color = "#ff4b4b"  # Streamlit red
+    bg_color = "#ffffff"       # White
+    sidebar_bg = "#f5f5f5"     # Light gray
+    text_color = "#262730"     # Dark text
+    muted_text = "#65676b"     # Medium gray
+    user_msg_bg = "#f0f0f0"    # Light gray for user
+    bot_msg_bg = "#f8f8f8"     # Off-white for bot
+    code_bg = "#f0f0f0"        # Light code background
 
+# Apply styling with fixes for spacing and Streamlit compatibility
 st.markdown(f"""
 <style>
-    /* Common styles */
-    .message-container {{
-        display: flex;
-        margin-bottom: 10px;
+    /* App background */
+    .stApp {{
+        background-color: {bg_color};
     }}
     
-    /* User message */
-    .user-message {{
-        margin-left: auto;
-        margin-right: 10px;
-        padding: 10px 15px;
-        border-radius: 10px;
-        background-color: {user_bg};
-        color: {text_color};
-        max-width: 75%;
-    }}
-    
-    /* Header for messages */
-    .message-header {{
-        font-size: 0.7rem;
-        color: {header_color};
-        margin-bottom: 5px;
-    }}
-    
-    /* Assistant message styling */
-    [data-testid="stChatMessage"] {{
-        background-color: {bot_bg} !important;
-        color: {text_color} !important;
-        max-width: 75%;
-        margin-left: 10px;
-        padding: 10px !important;
-    }}
-    
-    /* Assistant message caption */
-    [data-testid="stChatMessage"] .stChatCaption {{
-        color: {header_color} !important;
-        font-size: 0.7rem !important;
-        margin-bottom: 5px !important;
-    }}
-    
-    /* Form styles */
-    .stForm {{
-        padding-top: 0 !important;
-    }}
-    
-    /* Container padding */
+    /* Page container spacing */
     .block-container {{
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
+        padding-top: 3rem !important;
+        padding-bottom: 1.5rem !important;
         max-width: 900px;
     }}
     
-    /* Button width */
-    .stButton button {{
+
+    
+    /* Chat message container */
+    [data-testid="stChatMessage"] {{
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        margin-bottom: 24px !important;
+        border: 1px solid rgba(120, 120, 150, 0.2);
+        border-radius: 8px !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }}
+    
+    /* Add padding inside AI chat message content */
+    [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {{
+        padding-right: 20px !important;
+        padding-left: 10px !important;
+    }}
+    
+    /* User message container */
+    .user-message {{
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }}
+    
+    /* Message wrapper */
+    .message-container {{
         width: 100%;
+        padding: 0;
+        margin-bottom: 20px;
+    }}
+    
+    /* Code block styling */
+    [data-testid="stChatMessage"] pre {{
+        background-color: {code_bg} !important;
+        padding: 8px !important;
+        border-radius: 5px !important;
+        white-space: pre-wrap !important;
+        word-break: keep-all !important;
+        overflow-x: auto !important;
+    }}
+    
+    /* Code text styling */
+    [data-testid="stChatMessage"] pre code,
+    [data-testid="stChatMessage"] pre code span,
+    [data-testid="stChatMessage"] code {{
+        font-family: monospace !important;
+        color: {text_color} !important;
+    }}
+    
+    /* Text input spacing */
+    .stTextInput {{
+        margin-top: 20px !important;
+        margin-bottom: 20px !important;
+    }}
+    
+    /* Help text appearance */
+    .stTextInput .help-wrapper {{
+        margin-top: 5px !important;
+    }}
+    
+    /* Textarea sizing */
+    .stTextArea textarea {{
+        min-height: 100px !important;
+    }}
+    
+    /* Button styling */
+    .stButton button {{
+        background-color: {primary_color} !important;
+        color: white !important;
+        width: 100%;
+    }}
+    
+    /* Sidebar buttons */
+    [data-testid="stSidebar"] .stButton button {{
+        background-color: #666 !important;
+        color: white !important;
     }}
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar
+# Slim sidebar design
 with st.sidebar:
-    st.title("📚 Chat Sessions")
+    st.markdown(f"<h2 style='font-size:1.2rem; '>AI Chat</h2>", unsafe_allow_html=True)
     
-    # Dark/Light mode toggle
-    if "dark_mode" not in st.session_state:
-        st.session_state.dark_mode = True
-    
+    # Dark/Light mode toggle - simplified
     dark_mode = st.toggle("Dark Mode", value=st.session_state.dark_mode)
     if dark_mode != st.session_state.dark_mode:
         st.session_state.dark_mode = dark_mode
         st.rerun()
     
-    # Model info - simplified
-    st.caption("Using Ollama LLaMA model")
+    st.caption("Model: Ollama LLaMA")
     
-    st.markdown("---")
+    st.divider()
     
-    # Button to refresh chat list
-    if st.button("🔄 Refresh Chat List"):
-        st.rerun()
+    # Chat controls with clean, minimal layout
+    st.markdown("<p style='font-size:0.9rem; margin-bottom:0.5rem;'>Chat Sessions</p>", unsafe_allow_html=True)
     
-    # Create new chat button
-    if st.button("➕ New Chat"):
-        st.session_state.current_chat_id = None
-        st.session_state.current_chat_messages = []
-        st.rerun()
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("New Chat", key="new_chat"):
+            st.session_state.current_chat_id = None
+            st.session_state.current_chat_messages = []
+            st.rerun()
+    with col2:
+        if st.button("Refresh", key="refresh_list"):
+            st.rerun()
+    
+    st.divider()
     
     # Get existing chats
     try:
@@ -130,9 +181,8 @@ with st.sidebar:
         if response.status_code == 200:
             chats = response.json().get("chats", {})
             
-            # Create a DataFrame for better display
             if chats:
-                # Convert to list of dictionaries
+                # Convert to list and sort by last updated
                 chat_list = [
                     {
                         "chat_id": chat_id,
@@ -141,34 +191,30 @@ with st.sidebar:
                     }
                     for chat_id, info in chats.items()
                 ]
-                # Sort by last updated
                 chat_list = sorted(chat_list, key=lambda x: x["last_updated"], reverse=True)
                 
-                # Show chats in sidebar
-                st.subheader(f"Previous Chats ({len(chat_list)})")
+                # Show chats in a clean list without message count
                 for chat in chat_list:
-                    col1, col2, col3 = st.columns([2, 1, 1])
+                    # Create a slim chat item design
+                    col1, col2 = st.columns([4, 1])
                     with col1:
-                        if st.button(f"📝 {chat['chat_id']}", key=f"select_{chat['chat_id']}"):
+                        if st.button(f"{chat['chat_id']}", key=f"select_{chat['chat_id']}"):
                             st.session_state.current_chat_id = chat["chat_id"]
-                            # Load this chat
+                            st.session_state.current_chat_messages = []  # Clear to reload
                             st.rerun()
                     with col2:
-                        st.caption(f"{chat['message_count']} msgs")
-                    with col3:
-                        if st.button("🗑️", key=f"delete_{chat['chat_id']}"):
+                        if st.button("×", key=f"delete_{chat['chat_id']}"):
                             response = requests.delete(f"{API_URL}/chat/delete/{chat['chat_id']}")
                             if response.status_code == 200:
-                                st.success(f"Deleted chat {chat['chat_id']}")
                                 if "current_chat_id" in st.session_state and st.session_state.current_chat_id == chat["chat_id"]:
                                     st.session_state.current_chat_id = None
                                 st.rerun()
             else:
-                st.info("No previous chats found")
+                st.caption("No previous chats found")
         else:
-            st.error(f"Failed to fetch chats: {response.status_code}")
+            st.caption(f"Failed to fetch chats: {response.status_code}")
     except Exception as e:
-        st.error(f"Error connecting to API: {e}")
+        st.caption(f"Error connecting to API: {str(e)[:50]}...")
 
 # Initialize session state
 if "current_chat_id" not in st.session_state:
@@ -177,12 +223,10 @@ if "current_chat_id" not in st.session_state:
 if "current_chat_messages" not in st.session_state:
     st.session_state.current_chat_messages = []
 
-# Main content area
-st.title("🤖 Chat with LLM")
-
-# Show the current chat ID 
+# Main content - minimal and elegant
+# Show current chat ID in a subtle way
 if st.session_state.current_chat_id:
-    st.info(f"Current Chat ID: {st.session_state.current_chat_id}")
+    st.caption(f"Chat: {st.session_state.current_chat_id}")
     
     # Load current chat history if not loaded
     if not st.session_state.current_chat_messages:
@@ -194,21 +238,36 @@ if st.session_state.current_chat_id:
                 # Filter out system message
                 st.session_state.current_chat_messages = [msg for msg in messages if msg["role"] != "system"]
         except Exception as e:
-            st.error(f"Error loading chat: {e}")
+            st.caption(f"Error: {str(e)[:50]}...")
 else:
-    # Option to create a custom chat ID
-    custom_chat_id = st.text_input(
-        "Create custom chat ID (optional, alphanumeric, dashes, underscores only):",
-        key="custom_chat_id",
-        help="If left empty, a random ID will be generated"
-    )
-    if custom_chat_id:
-        if not all(c.isalnum() or c in "-_" for c in custom_chat_id):
-            st.warning("Chat ID can only contain alphanumeric characters, dashes, and underscores")
-        else:
-            st.session_state.current_chat_id = custom_chat_id
+    # Simplified custom ID handling to avoid duplicate rendering
+    if "custom_chat_id_submitted" not in st.session_state:
+        st.session_state.custom_chat_id_submitted = False
+    
+    # Add extra spacing
+    st.write("")
+    
+    # Only show the input if not already submitted
+    if not st.session_state.custom_chat_id_submitted:
+        # Function to handle chat ID submission
+        def set_chat_id():
+            if st.session_state.custom_chat_id:
+                if all(c.isalnum() or c in "-_" for c in st.session_state.custom_chat_id):
+                    st.session_state.current_chat_id = st.session_state.custom_chat_id
+                    st.session_state.custom_chat_id_submitted = True
+        
+        # Custom chat ID in a single controlled input
+        st.text_input(
+            "Custom Chat ID (optional):",
+            key="custom_chat_id",
+            on_change=set_chat_id,
+            help="Alphanumeric, dashes, and underscores only"
+        )
+    
+    # Add spacing after the custom ID field
+    st.write("")
 
-# Display chat messages
+# Display chat messages - full width approach
 for i, msg in enumerate(st.session_state.current_chat_messages):
     role = msg.get("role")
     content = msg.get("content")
@@ -216,35 +275,35 @@ for i, msg in enumerate(st.session_state.current_chat_messages):
     
     if timestamp:
         try:
-            timestamp = datetime.fromisoformat(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = datetime.fromisoformat(timestamp).strftime("%H:%M · %d %b")
         except:
             pass
     
     if role == "user":
-        # User message with HTML/CSS
+        # Full width user message
         st.markdown(f"""
         <div class="message-container">
             <div class="user-message">
-                <div class="message-header">You • {timestamp}</div>
+                <div class="message-header">You · {timestamp}</div>
                 <div>{content}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
     
     elif role == "assistant":
-        # Assistant message with proper markdown rendering
+        # Full width assistant message
         with st.chat_message("assistant"):
-            st.caption(f"AI Assistant • {timestamp}")
+            st.caption(f"AI · {timestamp}")
             st.markdown(content)
 
-# Chat input
+# Chat input - simplified and larger textbox
 with st.form(key="chat_form", clear_on_submit=True):
-    user_input = st.text_area("Type your message:", key="user_input", height=80)
-    cols = st.columns([4, 1])
+    user_input = st.text_area("Message", key="user_input", height=100)
+    cols = st.columns([6, 1])
     with cols[0]:
-        submit_button = st.form_submit_button(label="Send Message")
+        submit_button = st.form_submit_button(label="Send")
     with cols[1]:
-        clear_button = st.form_submit_button(label="Clear Chat")
+        clear_button = st.form_submit_button(label="Clear")
     
     if clear_button:
         st.session_state.current_chat_messages = []
@@ -256,22 +315,22 @@ with st.form(key="chat_form", clear_on_submit=True):
         if st.session_state.current_chat_id:
             payload["chat_id"] = st.session_state.current_chat_id
             
-        # Add user message to the UI immediately
+        # Add user message to the UI
         st.session_state.current_chat_messages.append({
             "role": "user",
             "content": user_input,
             "timestamp": datetime.now().isoformat()
         })
         
-        with st.spinner("AI is thinking..."):
+        with st.spinner("Thinking..."):
             try:
-                # Send the request to the API
+                # Send request to API
                 response = requests.post(f"{API_URL}/chat", json=payload)
                 
                 if response.status_code == 200:
                     data = response.json()
                     
-                    # Store the chat ID if this is a new conversation
+                    # Store chat ID if new conversation
                     if not st.session_state.current_chat_id:
                         st.session_state.current_chat_id = data.get("chat_id")
                     
@@ -284,11 +343,10 @@ with st.form(key="chat_form", clear_on_submit=True):
                 else:
                     st.error(f"Error: {response.status_code} - {response.text}")
             except Exception as e:
-                st.error(f"Error connecting to API: {e}")
+                st.error(f"Connection error: {str(e)[:50]}...")
         
-        # Force a rerun to show the new messages
+        # Show the new messages
         st.rerun()
 
-# Footer
-st.markdown("---")
+# Minimal footer
 st.caption("© 2025 Make It Real Consulting")
