@@ -448,4 +448,84 @@ class ChatInterface:
         result = await self.delete_chat(chat_id)
         if not result.get("success", False):
             raise HTTPException(status_code=404, detail=result.get("error", "Chat history not found"))
+        return result
+
+    @staticmethod
+    def update_system_prompt(new_prompt: str) -> Dict[str, Any]:
+        """
+        Update the system prompt file with new content.
+        
+        Args:
+            new_prompt (str): The new system prompt to save
+            
+        Returns:
+            Dict[str, Any]: Result of the operation
+        """
+        try:
+            if not new_prompt or not isinstance(new_prompt, str):
+                return {
+                    "error": "System prompt must be a non-empty string",
+                    "success": False
+                }
+                
+            # Save the new prompt to the file
+            with open(SYSTEM_PROMPT_FILE, "w") as file:
+                file.write(new_prompt)
+                
+            return {
+                "message": "System prompt updated successfully",
+                "prompt": new_prompt,
+                "success": True
+            }
+        except Exception as e:
+            return {
+                "error": f"Error updating system prompt: {str(e)}",
+                "success": False
+            }
+            
+    @staticmethod
+    def handle_get_system_prompt() -> Dict[str, Any]:
+        """
+        Process a request to get the current system prompt.
+        
+        Returns:
+            Dict[str, Any]: System prompt information
+        """
+        try:
+            prompt = ChatInterface.get_system_prompt()
+            return {
+                "prompt": prompt,
+                "success": True
+            }
+        except Exception as e:
+            return {
+                "error": f"Error getting system prompt: {str(e)}",
+                "success": False
+            }
+            
+    @staticmethod
+    def handle_update_system_prompt(request: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process a request to update the system prompt.
+        
+        Args:
+            request (Dict[str, Any]): The request data containing the new prompt
+            
+        Returns:
+            Dict[str, Any]: Result of the operation
+            
+        Raises:
+            HTTPException: If the request is invalid
+        """
+        if "prompt" not in request:
+            raise HTTPException(status_code=400, detail="Prompt field is required")
+            
+        new_prompt = request["prompt"]
+        if not new_prompt or not isinstance(new_prompt, str):
+            raise HTTPException(status_code=400, detail="Prompt must be a non-empty string")
+            
+        result = ChatInterface.update_system_prompt(new_prompt)
+        if not result.get("success", False):
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to update system prompt"))
+            
         return result 
