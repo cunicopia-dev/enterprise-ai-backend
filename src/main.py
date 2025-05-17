@@ -22,7 +22,9 @@ def create_app():
                 {"path": "/chat", "description": "Chat with LLM using Ollama", "method": "POST"},
                 {"path": "/chat/history", "description": "Get chat history", "method": "GET"},
                 {"path": "/chat/history/{chat_id}", "description": "Get specific chat history", "method": "GET"},
-                {"path": "/chat/delete/{chat_id}", "description": "Delete specific chat", "method": "DELETE"}
+                {"path": "/chat/delete/{chat_id}", "description": "Delete specific chat", "method": "DELETE"},
+                {"path": "/system-prompt", "description": "Get current system prompt", "method": "GET"},
+                {"path": "/system-prompt", "description": "Update system prompt", "method": "POST"}
             ]
         }
 
@@ -63,6 +65,25 @@ def create_app():
         Delete a specific chat history.
         """
         return await chat_interface.handle_delete_chat(chat_id)
+        
+    @app.get("/system-prompt")
+    async def get_system_prompt():
+        """
+        Get the current system prompt.
+        """
+        return chat_interface.handle_get_system_prompt()
+        
+    @app.post("/system-prompt")
+    async def update_system_prompt(request: Dict[str, str] = Body(...)):
+        """
+        Update the system prompt.
+        
+        Expected request body:
+        {
+            "prompt": "Your new system prompt text"
+        }
+        """
+        return chat_interface.handle_update_system_prompt(request)
         
     return app
 
