@@ -1,0 +1,20 @@
+[client]
+showErrorDetails = false
+
+[runner]
+magicEnabled = false
+
+[server]
+enableCORS = true
+enableXsrfProtection = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#5a67d8"
+backgroundColor = "#1a1c24"
+secondaryBackgroundColor = "#23252e"
+textColor = "#e0e2eb"
+font = "monospace"
