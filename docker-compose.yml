@@ -14,6 +14,8 @@ services:
       - CHAT_HISTORY_DIR=/app/chats
       - SYSTEM_PROMPT_FILE=/app/system_prompt.txt
       - SYSTEM_PROMPTS_DIR=/app/system_prompts
+      - API_KEY=${API_KEY}
+      - RATE_LIMIT_PER_HOUR=${RATE_LIMIT_PER_HOUR:-1000}
     networks:
       - app-network
 
@@ -29,6 +31,7 @@ services:
       - ./base_system_prompt.txt:/app/base_system_prompt.txt
     environment:
       - API_URL=http://api:8000
+      - API_KEY=${API_KEY}
     networks:
       - app-network
 
