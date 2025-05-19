@@ -5,10 +5,11 @@ import re
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Protocol
 from fastapi import HTTPException
+from .config import config
 
 # Directory for storing chat histories
-CHAT_HISTORY_DIR = os.environ.get("CHAT_HISTORY_DIR", "chats")
-SYSTEM_PROMPT_FILE = os.environ.get("SYSTEM_PROMPT_FILE", "system_prompt.txt")
+CHAT_HISTORY_DIR = config.CHAT_HISTORY_DIR
+SYSTEM_PROMPT_FILE = config.SYSTEM_PROMPT_FILE
 
 class LLMProvider(Protocol):
     """Protocol defining what a language model provider must implement"""
@@ -52,8 +53,11 @@ class ChatInterface:
         Returns:
             bool: True if valid, False otherwise
         """
-        # Allow alphanumeric characters, dashes, and underscores
-        return bool(re.match(r'^[a-zA-Z0-9_-]+$', chat_id))
+        # Enhanced validation to prevent directory traversal
+        if ".." in chat_id or "/" in chat_id or "\\" in chat_id:
+            return False
+        # Allow alphanumeric characters, dashes, and underscores, max 50 chars
+        return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', chat_id))
 
     @staticmethod
     def get_system_prompt() -> str:
