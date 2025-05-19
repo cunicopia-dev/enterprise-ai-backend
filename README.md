@@ -45,6 +45,9 @@ A modern FastAPI application with multiple endpoints including LLM capabilities 
 
 - 🚀 **Modern FastAPI Framework**: High-performance, easy to learn, fast to code
 - 🔄 **Health Check Endpoint**: Monitor application status
+- 🔐 **API Key Authentication**: Secure endpoints with Bearer token authentication
+- 🛡️ **Rate Limiting**: Configurable request rate limiting per IP address
+- ✅ **Input Validation**: Comprehensive validation of all user inputs
 - 🤖 **Pluggable LLM Providers**: Easily switch between different LLM providers
 - 💾 **Scalable Chat History**: Each conversation stored in its own file
 - 🆔 **Custom Chat IDs**: Use your own identifiers for conversation tracking
@@ -90,6 +93,23 @@ pip install -r requirements.fastapi.txt
 pip install -r requirements.streamlit.txt
 ```
 
+### Configuration
+
+Create a `.env` file in the project root:
+
+```env
+# API Security
+API_KEY=your-secure-api-key-here
+
+# Rate Limiting
+RATE_LIMIT_PER_HOUR=1000
+
+# API Configuration
+CHAT_HISTORY_DIR=chats
+SYSTEM_PROMPT_FILE=system_prompt.txt
+SYSTEM_PROMPTS_DIR=system_prompts
+```
+
 ## Setting Up Ollama
 
 1. Install Ollama from [ollama.ai/download](https://ollama.ai/download)
@@ -123,7 +143,15 @@ The Streamlit UI will be available at http://127.0.0.1:8501
 
 ### Using Docker Compose
 
-Run both the backend and frontend with a single command:
+Set environment variables and run:
+
+```bash
+export API_KEY=your-secure-api-key-here
+export RATE_LIMIT_PER_HOUR=1000
+docker-compose up
+```
+
+Or use the .env file:
 
 ```bash
 docker-compose up
@@ -134,12 +162,15 @@ docker-compose up
 
 ## API Endpoints
 
+All endpoints except `/` and `/health` require authentication with an API key in the header:
+`Authorization: Bearer <API_KEY>`
+
 The application has the following endpoints:
 
 ### Root and Health
 
-1. `GET /` - Returns API information and available endpoints
-2. `GET /health` - Returns the health status of the API
+1. `GET /` - Returns API information and available endpoints (no auth required)
+2. `GET /health` - Returns the health status of the API (no auth required)
 
 ### Chat Endpoints
 
@@ -194,6 +225,7 @@ Send a POST request without a chat_id to start a new conversation:
 
 ```bash
 curl -X POST http://localhost:8000/chat \
+  -H "Authorization: Bearer your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{"message": "Tell me a fun fact about space"}'
 ```
@@ -204,6 +236,7 @@ Use the chat_id returned from a previous request to continue the conversation:
 
 ```bash
 curl -X POST http://localhost:8000/chat \
+  -H "Authorization: Bearer your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{"message": "Tell me more about stars", "chat_id": "space-facts"}'
 ```
@@ -213,13 +246,15 @@ curl -X POST http://localhost:8000/chat \
 ### Get Active System Prompt
 
 ```bash
-curl -X GET http://localhost:8000/system-prompt
+curl -X GET http://localhost:8000/system-prompt \
+  -H "Authorization: Bearer your-api-key-here"
 ```
 
 ### Set Active System Prompt
 
 ```bash
 curl -X POST http://localhost:8000/system-prompt \
+  -H "Authorization: Bearer your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "You are a helpful assistant..."}'
 ```
@@ -228,6 +263,7 @@ curl -X POST http://localhost:8000/system-prompt \
 
 ```bash
 curl -X POST http://localhost:8000/system-prompts \
+  -H "Authorization: Bearer your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Customer Support",
@@ -239,7 +275,8 @@ curl -X POST http://localhost:8000/system-prompts \
 ### Activate a System Prompt from Library
 
 ```bash
-curl -X POST http://localhost:8000/system-prompts/customer-support/activate
+curl -X POST http://localhost:8000/system-prompts/customer-support/activate \
+  -H "Authorization: Bearer your-api-key-here"
 ```
 
 ## Streamlit User Interface
