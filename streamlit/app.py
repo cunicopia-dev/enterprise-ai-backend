@@ -1,9 +1,11 @@
 import streamlit as st
-import requests
 import os
 from datetime import datetime
-import json
-import re
+
+# Import modules
+from modules.sidebar import render_sidebar
+from modules.chat import render_chat_tab
+from modules.prompts import render_prompts_tab
 
 # Configuration
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
@@ -138,8 +140,43 @@ st.markdown("""
         border-color: rgba(90, 103, 216, 0.5);
     }
     
-
+    /* Prompt control buttons */
+    .sidebar-item + div [data-testid="stHorizontalBlock"] [data-testid="column"] button {
+        font-size: 0.65rem !important;
+        padding: 0.1rem 0.2rem !important;
+        width: 100%;
+        min-height: 1.6rem !important;
+        border-radius: 3px;
+        margin-bottom: 0.4rem;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+    }
     
+    /* Prompt Library Styling */
+    [data-testid="stVerticalBlock"] > div:has(div.element-container:has(h3:contains("Prompt Library"))) {
+        max-height: 600px;
+        overflow-y: auto;
+        background-color: rgba(26, 28, 36, 0.5);
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* Active prompt indicator */
+    button:has(span:contains("📌")) {
+        background-color: rgba(90, 103, 216, 0.25) !important;
+        border-color: rgba(90, 103, 216, 0.5) !important;
+    }
+    
+    /* Code display for system prompts */
+    .stCodeBlock {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    /* Message containers */
     .message {
         padding: 0.5rem 0.75rem;
         border-radius: 4px;
@@ -298,18 +335,6 @@ st.markdown("""
         overflow-y: auto;
     }
     
-    .session-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.15rem 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    
-    .session-item:last-child {
-        border-bottom: none;
-    }
-    
     /* Updated button styles for session list */
     [data-testid="stHorizontalBlock"] [data-testid="column"] button {
         font-size: 0.7rem !important;
@@ -347,298 +372,30 @@ st.markdown("""
         border-color: rgba(255, 100, 100, 0.3) !important;
         color: rgba(255, 100, 100, 0.9) !important;
     }
-    
-    .session-button {
-        text-align: left;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        width: 100%;
-        padding: 0.15rem 0.3rem;
-        font-size: 0.7rem !important;
-        color: #e0e2eb;
-        background: transparent;
-        border: none;
-        border-radius: 3px;
-        cursor: pointer;
-        transition: background-color 0.15s ease;
-    }
-    
-    .session-button:hover {
-        background: rgba(90, 103, 216, 0.1);
-    }
-    
-    .delete-button {
-        color: #ff7b72;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        padding: 0.15rem 0.3rem;
-        font-size: 0.7rem !important;
-        border-radius: 3px;
-        transition: background-color 0.15s ease;
-    }
-    
-    .delete-button:hover {
-        background: rgba(218, 54, 51, 0.15);
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar with improved layout
-with st.sidebar:
-    st.markdown("<div class='sidebar-item' style='font-weight:500; margin-bottom:0.5rem;'>AI Workflow Hub</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sidebar-item' style='font-size:0.7rem !important; color:#a0a4b8; margin-bottom:1rem;'>Ollama LLaMA</div>", unsafe_allow_html=True)
-    
-    # Theme toggle with smaller control
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        dark_mode = st.toggle("Dark mode toggle", value=st.session_state.dark_mode, key="theme_toggle", label_visibility="collapsed")
-    with col2:
-        st.markdown("<div class='sidebar-item' style='font-size:0.7rem !important;'>Dark Mode</div>", unsafe_allow_html=True)
-    
-    if dark_mode != st.session_state.dark_mode:
-        st.session_state.dark_mode = dark_mode
-        st.rerun()
-    
-    # System prompt with improved layout
-    st.markdown("<div class='sidebar-item' style='margin-top:0.75rem; margin-bottom:0.25rem;'>System Prompt</div>", unsafe_allow_html=True)
-    
-    # Load system prompt if not loaded
-    if not st.session_state.system_prompt_loaded:
-        try:
-            response = requests.get(f"{API_URL}/system-prompt")
-            if response.status_code == 200:
-                st.session_state.system_prompt = response.json().get("prompt", "")
-                st.session_state.system_prompt_loaded = True
-        except Exception as e:
-            st.markdown(f"<div class='sidebar-item error-message'>Error: {str(e)[:30]}</div>", unsafe_allow_html=True)
-    
-    # Prompt controls
-    prompt_cols = st.columns([1, 1])
-    with prompt_cols[0]:
-        if st.button("↻ Reload", key="reload_prompt", help="Reload system prompt", type="secondary"):
-            try:
-                response = requests.get(f"{API_URL}/system-prompt")
-                if response.status_code == 200:
-                    st.session_state.system_prompt = response.json().get("prompt", "")
-                    st.session_state.system_prompt_loaded = True
-                    st.markdown("<div class='sidebar-item success-message'>Reloaded</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<div class='sidebar-item error-message'>Error: {response.status_code}</div>", unsafe_allow_html=True)
-            except Exception as e:
-                st.markdown(f"<div class='sidebar-item error-message'>Error: {str(e)[:30]}</div>", unsafe_allow_html=True)
-    
-    with prompt_cols[1]:
-        if st.button("💾 Save", key="update_prompt", help="Save system prompt", type="secondary"):
-            try:
-                response = requests.post(f"{API_URL}/system-prompt", json={"prompt": st.session_state.system_prompt})
-                if response.status_code == 200:
-                    st.markdown("<div class='sidebar-item success-message'>Saved</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<div class='sidebar-item error-message'>Error: {response.status_code}</div>", unsafe_allow_html=True)
-            except Exception as e:
-                st.markdown(f"<div class='sidebar-item error-message'>Error: {str(e)[:30]}</div>", unsafe_allow_html=True)
-    
-    # System prompt text area
-    st.text_area("System prompt", value=st.session_state.system_prompt, key="system_prompt", height=100, label_visibility="collapsed")
-    
-    # Sessions header
-    st.markdown("<div class='sidebar-item' style='margin-top:0.75rem; margin-bottom:0.25rem;'>Sessions</div>", unsafe_allow_html=True)
-    
-    # Session controls
-    session_cols = st.columns([1, 1])
-    with session_cols[0]:
-        if st.button("+ New", key="new_chat", help="New session", type="secondary"):
-            st.session_state.current_chat_id = None
-            st.session_state.current_chat_messages = []
-            st.session_state.custom_chat_id_submitted = False
-            st.rerun()
-    
-    with session_cols[1]:
-        if st.button("↻ Refresh", key="refresh_chats", help="Refresh sessions", type="secondary"):
-            st.rerun()
-    
-    # Sessions list with improved styling
-    st.markdown("<div class='session-list'>", unsafe_allow_html=True)
-    
-    try:
-        response = requests.get(f"{API_URL}/chat/history")
-        if response.status_code == 200:
-            chats = response.json().get("chats", {})
-            if chats:
-                chat_list = [
-                    {"chat_id": chat_id, "last_updated": info.get("last_updated", "")}
-                    for chat_id, info in chats.items()
-                ]
-                chat_list = sorted(chat_list, key=lambda x: x["last_updated"], reverse=True)[:8]
-                
-                for chat in chat_list:
-                    short_id = chat["chat_id"][:15] + "..." if len(chat["chat_id"]) > 15 else chat["chat_id"]
-                    
-                    # Simplified session selection UI
-                    col1, col2 = st.columns([5, 1])
-                    with col1:
-                        if st.button(short_id, key=f"select_{chat['chat_id']}", help=chat["chat_id"]):
-                            st.session_state.current_chat_id = chat["chat_id"]
-                            st.session_state.current_chat_messages = []  # Clear to reload
-                            st.rerun()
-                    with col2:
-                        if st.button("×", key=f"delete_{chat['chat_id']}", help="Delete session"):
-                            response = requests.delete(f"{API_URL}/chat/delete/{chat['chat_id']}")
-                            if response.status_code == 200:
-                                if st.session_state.current_chat_id == chat["chat_id"]:
-                                    st.session_state.current_chat_id = None
-                                    st.session_state.current_chat_messages = []
-                                st.rerun()
-            else:
-                st.markdown("<div class='sidebar-item' style='font-size:0.7rem !important; color:#a0a4b8; padding:0.25rem;'>No sessions</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='sidebar-item error-message'>Error: {response.status_code}</div>", unsafe_allow_html=True)
-    except Exception as e:
-        st.markdown(f"<div class='sidebar-item error-message'>Error: {str(e)[:30]}</div>", unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
+# Render sidebar
+render_sidebar()
 
-# Main content - more compact header
+# Main content header
 st.markdown("<h1>AI Workflow Hub</h1>", unsafe_allow_html=True)
 
 # Tab navigation using Streamlit's built-in tabs
-tab1, tab2, tab3 = st.tabs(["Chat", "OCR", "Tools"])
+tabs = st.tabs(["Chat", "System Prompts", "OCR", "Tools"])
+# Store tabs in session state for sidebar navigation
+st.session_state._tabs = tabs
 
 # Content for Chat tab
-with tab1:
-    # Show current session ID
-    if st.session_state.current_chat_id:
-        st.markdown(f"<div style='font-size:0.75rem !important; color:#a0a4b8; margin-bottom:0.5rem;'>Session: {st.session_state.current_chat_id}</div>", unsafe_allow_html=True)
-    else:
-        # Custom session ID input
-        def set_chat_id():
-            if st.session_state.custom_chat_id:
-                if all(c.isalnum() or c in "-_" for c in st.session_state.custom_chat_id):
-                    st.session_state.current_chat_id = st.session_state.custom_chat_id
-                    st.session_state.custom_chat_id_submitted = True
-        
-        if not st.session_state.custom_chat_id_submitted:
-            st.text_input(
-                "Session ID (optional)",
-                key="custom_chat_id",
-                on_change=set_chat_id,
-                placeholder="e.g., project-123",
-                help="Letters, numbers, dashes, underscores"
-            )
-    
-    # Load chat history if we have a chat ID but no messages loaded
-    if st.session_state.current_chat_id and not st.session_state.current_chat_messages:
-        try:
-            response = requests.get(f"{API_URL}/chat/history/{st.session_state.current_chat_id}")
-            if response.status_code == 200:
-                messages = response.json().get("history", {}).get("messages", [])
-                st.session_state.current_chat_messages = [msg for msg in messages if msg["role"] != "system"]
-        except Exception as e:
-            st.markdown(f"<div class='error-message'>Error: {str(e)[:30]}</div>", unsafe_allow_html=True)
-    
-    # Chat container with improved styling
-    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
-    
-    for msg in st.session_state.current_chat_messages:
-        role = msg.get("role")
-        content = msg.get("content", "")
-        timestamp = msg.get("timestamp", "")
-        
-        if timestamp:
-            try:
-                timestamp = datetime.fromisoformat(timestamp).strftime("%H:%M · %b %d")
-            except (ValueError, TypeError):
-                timestamp = ""
-        
-        # Process content for code blocks
-        content = content.replace("\n", "<br>")
-        
-        # Convert markdown code blocks to HTML
-        code_pattern = r"```(.*?)```"
-        def code_replace(match):
-            code = match.group(1).strip()
-            return f"<pre><code>{code}</code></pre>"
-        
-        content = re.sub(code_pattern, code_replace, content, flags=re.DOTALL)
-        
-        # Convert inline code
-        inline_code_pattern = r"`(.*?)`"
-        content = re.sub(inline_code_pattern, r"<code>\1</code>", content)
-        
-        class_name = "user-message" if role == "user" else "assistant-message"
-        role_display = "You" if role == "user" else "Assistant"
-        
-        st.markdown(f"""
-        <div class='message {class_name}'>
-            <div class='timestamp'>{role_display} · {timestamp}</div>
-            <div>{content}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Chat input with improved styling
-    with st.form(key="chat_form", clear_on_submit=True):
-        user_input = st.text_area("Message input", key="user_input", height=60, placeholder="Type your message...", label_visibility="collapsed")
-        
-        # Form controls
-        form_cols = st.columns([6, 1, 1])
-        with form_cols[0]:
-            submit_button = st.form_submit_button("Send")
-        with form_cols[1]:
-            clear_button = st.form_submit_button("Clear")
-        with form_cols[2]:
-            delete_button = st.form_submit_button("🗑")
-        
-        # Handle button actions
-        if clear_button:
-            st.session_state.current_chat_messages = []
-            st.rerun()
-        
-        if delete_button:
-            st.session_state.current_chat_id = None
-            st.session_state.current_chat_messages = []
-            st.session_state.custom_chat_id_submitted = False
-            st.rerun()
-        
-        if submit_button and user_input:
-            payload = {"message": user_input}
-            if st.session_state.current_chat_id:
-                payload["chat_id"] = st.session_state.current_chat_id
-            
-            # Add user message to the UI
-            st.session_state.current_chat_messages.append({
-                "role": "user",
-                "content": user_input,
-                "timestamp": datetime.now().isoformat()
-            })
-            
-            # Send message to API
-            with st.spinner(""):
-                try:
-                    response = requests.post(f"{API_URL}/chat", json=payload)
-                    if response.status_code == 200:
-                        data = response.json()
-                        if not st.session_state.current_chat_id:
-                            st.session_state.current_chat_id = data.get("chat_id")
-                        
-                        # Add assistant response
-                        st.session_state.current_chat_messages.append({
-                            "role": "assistant",
-                            "content": data.get("response", "Error: No response"),
-                            "timestamp": datetime.now().isoformat()
-                        })
-                    else:
-                        st.markdown(f"<div class='error-message'>Error: {response.status_code}</div>", unsafe_allow_html=True)
-                except Exception as e:
-                    st.markdown(f"<div class='error-message'>Error: {str(e)[:30]}</div>", unsafe_allow_html=True)
-            
-            st.rerun()
+with tabs[0]:
+    render_chat_tab()
+
+# Content for System Prompts tab
+with tabs[1]:
+    render_prompts_tab()
 
 # Content for OCR tab
-with tab2:
+with tabs[2]:
     st.markdown("""
     <div style='background: rgba(26, 28, 36, 0.5); border-radius: 4px; padding: 1rem; border: 1px solid rgba(255, 255, 255, 0.05);'>
         <div style='font-size:0.85rem !important; color:#e0e2eb;'>OCR module coming soon...</div>
@@ -647,7 +404,7 @@ with tab2:
     """, unsafe_allow_html=True)
 
 # Content for Tools tab
-with tab3:
+with tabs[3]:
     st.markdown("""
     <div style='background: rgba(26, 28, 36, 0.5); border-radius: 4px; padding: 1rem; border: 1px solid rgba(255, 255, 255, 0.05);'>
         <div style='font-size:0.85rem !important; color:#e0e2eb;'>Tools module coming soon...</div>
