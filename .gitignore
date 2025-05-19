@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+system_prompts/ 
+system_prompt.txt
+
+
 # C extensions
 *.so
 
