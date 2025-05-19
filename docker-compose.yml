@@ -8,9 +8,12 @@ services:
     volumes:
       - ./chats:/app/chats
       - ./system_prompt.txt:/app/system_prompt.txt
+      - ./base_system_prompt.txt:/app/base_system_prompt.txt
+      - ./system_prompts:/app/system_prompts
     environment:
       - CHAT_HISTORY_DIR=/app/chats
       - SYSTEM_PROMPT_FILE=/app/system_prompt.txt
+      - SYSTEM_PROMPTS_DIR=/app/system_prompts
     networks:
       - app-network
 
@@ -22,6 +25,8 @@ services:
       - "8501:8501"
     depends_on:
       - api
+    volumes:
+      - ./base_system_prompt.txt:/app/base_system_prompt.txt
     environment:
       - API_URL=http://api:8000
     networks:
