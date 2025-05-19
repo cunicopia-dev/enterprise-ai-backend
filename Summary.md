@@ -157,20 +157,7 @@ class SystemPrompt(Base):
     is_active = Column(Boolean, default=False)
 ```
 
-#### 2.2 Redis Caching
-```python
-# Add Redis for caching and session management
-import redis.asyncio as redis
 
-cache = redis.Redis(host='redis', port=6379, decode_responses=True)
-
-@app.post("/chat")
-async def chat(...):
-    # Check cache first
-    cached_response = await cache.get(f"chat:{chat_id}:{message_hash}")
-    if cached_response:
-        return json.loads(cached_response)
-```
 
 ### Phase 3: Enhanced Features (Priority 3)
 
