@@ -20,6 +20,7 @@ fi
 # Set environment variables for persistence
 ENV SYSTEM_PROMPT_FILE="/app/system_prompt.txt"
 ENV CHAT_HISTORY_DIR="/app/chats"
+ENV SYSTEM_PROMPTS_DIR="/app/system_prompts"
 
 EXPOSE 8000
 
