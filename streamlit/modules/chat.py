@@ -190,8 +190,7 @@ def render_chat_tab():
     print(f"Chat session state: ID={st.session_state.current_chat_id}, Messages={len(st.session_state.current_chat_messages)}")
     
     # Add a debug toggler (hidden in UI but accessible by query param ?debug=true)
-    query_params = st.experimental_get_query_params()
-    if "debug" in query_params and query_params["debug"][0].lower() == "true":
+    if "debug" in st.query_params and st.query_params["debug"].lower() == "true":
         st.session_state.debug_mode = True
         
     # Show debug info if enabled
