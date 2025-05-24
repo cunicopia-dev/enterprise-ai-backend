@@ -1,6 +1,6 @@
 # FastAPI with LLM Provider Integration
 
-A modern FastAPI application with multiple endpoints including LLM capabilities with pluggable provider support and a user-friendly Streamlit frontend.
+A modern FastAPI application with PostgreSQL database integration, multiple endpoints including LLM capabilities with pluggable provider support, and a user-friendly Streamlit frontend.
 
 ![FastAPI](https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png)
 
@@ -14,10 +14,29 @@ A modern FastAPI application with multiple endpoints including LLM capabilities 
 │       ├── provider/    # LLM provider implementations
 │       │   ├── __init__.py
 │       │   └── ollama.py # Ollama provider implementation
+│       ├── models/       # Data models
+│       │   ├── api_models.py # Pydantic models for API
+│       │   └── db_models.py  # SQLAlchemy database models
+│       ├── repository/  # Database repository pattern
+│       │   ├── base.py  # Base repository
+│       │   ├── chat_repository.py
+│       │   ├── message_repository.py
+│       │   ├── system_prompt_repository.py
+│       │   ├── user_repository.py
+│       │   └── rate_limit_repository.py
 │       ├── __init__.py
-│       ├── chat_interface.py # Abstract chat interface
+│       ├── auth.py      # Authentication logic
+│       ├── chat_interface_db.py # Database-backed chat interface
+│       ├── config.py    # Configuration management
+│       ├── database.py  # Database connection and session
 │       ├── health.py    # Health check functionality
-│       └── system_prompt.py # System prompt management
+│       ├── migration.py # Database migration utilities
+│       └── system_prompt_db.py # Database-backed system prompt management
+├── sql/                 # Database SQL scripts
+│   ├── 01_schema.sql    # Database schema definition
+│   ├── 02_seed_data.sql # Initial seed data
+│   ├── setup.sql        # Master setup script
+│   └── docker-init.sh   # Docker initialization script
 ├── streamlit/           # Streamlit frontend application
 │   ├── app.py           # Main Streamlit application
 │   ├── modules/         # Modular components
@@ -25,56 +44,169 @@ A modern FastAPI application with multiple endpoints including LLM capabilities 
 │   │   ├── prompts.py   # System prompt management module
 │   │   └── sidebar.py   # Sidebar navigation module
 │   └── run.sh           # Startup script for Streamlit
-├── chats/               # Directory for individual chat history files
-│   └── index.json       # Index of all available chats
-├── system_prompts/      # Directory for system prompt library
-│   ├── index.json       # Index of all available prompts
-│   ├── basic.json       # Default basic prompt
-│   ├── code-assistant.json # Code assistant prompt
-│   └── research-assistant.json # Research assistant prompt
-├── system_prompt.txt    # Active system prompt for the LLM
+├── chats/               # Legacy directory for file-based chat history
+├── system_prompts/      # Legacy directory for file-based system prompts
 ├── requirements.fastapi.txt # Python dependencies for FastAPI backend
 ├── requirements.streamlit.txt # Python dependencies for Streamlit frontend
 ├── Dockerfile.fastapi   # Docker configuration for FastAPI backend
 ├── Dockerfile.streamlit # Docker configuration for Streamlit frontend
-├── docker-compose.yml   # Docker Compose for running both services
+├── docker-compose.yml   # Docker Compose for running all services
+├── .env.example         # Example environment configuration
 └── README.md            # Documentation
 ```
 
 ## Features
 
 - 🚀 **Modern FastAPI Framework**: High-performance, easy to learn, fast to code
+- 🐘 **PostgreSQL Database**: Robust relational database for data persistence
 - 🔄 **Health Check Endpoint**: Monitor application status
-- 🔐 **API Key Authentication**: Secure endpoints with Bearer token authentication
-- 🛡️ **Rate Limiting**: Configurable request rate limiting per IP address
+- 🔐 **Database-Backed Authentication**: Secure endpoints with user management and API keys
+- 🛡️ **Rate Limiting**: Database-tracked rate limiting per user
 - ✅ **Input Validation**: Comprehensive validation of all user inputs
 - 🤖 **Pluggable LLM Providers**: Easily switch between different LLM providers
-- 💾 **Scalable Chat History**: Each conversation stored in its own file
+- 💾 **Scalable Data Storage**: PostgreSQL database with proper indexing
+- 👥 **Multi-User Support**: Each user has isolated chat sessions
 - 🆔 **Custom Chat IDs**: Use your own identifiers for conversation tracking
-- 🧵 **Multiple Chat Sessions**: Support for multiple chat threads with IDs
-- 📝 **Customizable System Prompt**: Define LLM behavior via editable file
+- 🧵 **Multiple Chat Sessions**: Support for multiple chat threads per user
+- 📝 **Customizable System Prompt**: Define LLM behavior with database persistence
 - 📚 **System Prompt Library**: Create, edit, and manage multiple system prompts
 - 🗑️ **Chat Management**: Delete unwanted conversation histories
 - 🖥️ **Streamlit Web UI**: Modern, intuitive user interface with dark mode
-- 🧩 **Modular UI Architecture**: Streamlit app is organized into maintainable modules
-- 🐳 **Docker Support**: Easy containerization and deployment for both services
+- 🧩 **Modular Architecture**: Clean separation of concerns with repository pattern
+- 🐳 **Docker Support**: Complete containerization with PostgreSQL included
+- 🔄 **Automatic Migration**: Seamless migration from file-based to database storage
 
 ## Architecture
 
 The application follows a modular architecture with the following key components:
 
-1. **ChatInterface**: Core module that handles chat history management and user requests
-2. **LLM Providers**: Pluggable implementations for different LLM services
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        UI[Streamlit UI]
+        UI_Chat[Chat Module]
+        UI_Prompts[Prompts Module]
+        UI_Sidebar[Sidebar Module]
+        
+        UI --> UI_Chat
+        UI --> UI_Prompts
+        UI --> UI_Sidebar
+    end
+    
+    subgraph "API Layer"
+        FastAPI[FastAPI Application]
+        Auth[Authentication<br/>Middleware]
+        RateLimit[Rate Limiting<br/>Middleware]
+        
+        FastAPI --> Auth
+        FastAPI --> RateLimit
+    end
+    
+    subgraph "Business Logic Layer"
+        ChatInterface[Chat Interface]
+        SystemPromptMgr[System Prompt<br/>Manager]
+        LLMProvider[LLM Provider<br/>Interface]
+        Ollama[Ollama<br/>Provider]
+        
+        ChatInterface --> LLMProvider
+        LLMProvider --> Ollama
+    end
+    
+    subgraph "Data Access Layer"
+        UserRepo[User<br/>Repository]
+        ChatRepo[Chat<br/>Repository]
+        MessageRepo[Message<br/>Repository]
+        PromptRepo[System Prompt<br/>Repository]
+        RateLimitRepo[Rate Limit<br/>Repository]
+    end
+    
+    subgraph "Database Layer"
+        PostgreSQL[(PostgreSQL)]
+        Users[Users Table]
+        Chats[Chats Table]
+        Messages[Messages Table]
+        SystemPrompts[System Prompts<br/>Table]
+        RateLimits[Rate Limits<br/>Table]
+        
+        PostgreSQL --> Users
+        PostgreSQL --> Chats
+        PostgreSQL --> Messages
+        PostgreSQL --> SystemPrompts
+        PostgreSQL --> RateLimits
+    end
+    
+    subgraph "External Services"
+        OllamaService[Ollama Service<br/>:11434]
+    end
+    
+    %% Connections
+    UI_Chat --> |HTTP/API Key| FastAPI
+    UI_Prompts --> |HTTP/API Key| FastAPI
+    UI_Sidebar --> |HTTP/API Key| FastAPI
+    
+    FastAPI --> ChatInterface
+    FastAPI --> SystemPromptMgr
+    
+    ChatInterface --> ChatRepo
+    ChatInterface --> MessageRepo
+    SystemPromptMgr --> PromptRepo
+    Auth --> UserRepo
+    RateLimit --> RateLimitRepo
+    
+    UserRepo --> PostgreSQL
+    ChatRepo --> PostgreSQL
+    MessageRepo --> PostgreSQL
+    PromptRepo --> PostgreSQL
+    RateLimitRepo --> PostgreSQL
+    
+    Ollama --> |HTTP| OllamaService
+    
+    %% Styling
+    classDef frontend fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
+    classDef api fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000
+    classDef business fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000
+    classDef data fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef database fill:#fce4ec,stroke:#880e4f,stroke-width:2px,color:#000
+    classDef external fill:#f5f5f5,stroke:#424242,stroke-width:2px,color:#000
+    
+    class UI,UI_Chat,UI_Prompts,UI_Sidebar frontend
+    class FastAPI,Auth,RateLimit api
+    class ChatInterface,SystemPromptMgr,LLMProvider,Ollama business
+    class UserRepo,ChatRepo,MessageRepo,PromptRepo,RateLimitRepo data
+    class PostgreSQL,Users,Chats,Messages,SystemPrompts,RateLimits database
+    class OllamaService external
+```
+
+### Architecture Components:
+
+1. **Database Layer**: PostgreSQL database with SQLAlchemy ORM
+   - Users, Chats, Messages, System Prompts, and Rate Limits tables
+   - Repository pattern for clean data access
+   - Connection pooling for performance
+2. **Authentication Layer**: Database-backed user and API key management
+   - Support for multiple users with isolated data
+   - API key generation and validation
+3. **Chat Interface**: Core module that handles chat history management
+   - Database persistence for all conversations
+   - User isolation and access control
+4. **LLM Providers**: Pluggable implementations for different LLM services
    - Currently supports Ollama
    - Designed to easily add other providers like OpenAI, Anthropic, etc.
-3. **SystemPromptManager**: Manages the system prompt library and active prompt
-4. **Persistence Layer**: Stores chat sessions and system prompts in files for scalability
-5. **API Layer**: FastAPI routes that interface with the underlying systems
-6. **Streamlit UI**: Modular frontend composed of chat, sidebar, and prompt management components
+5. **System Prompt Manager**: Database-backed prompt library
+   - Create, update, delete, and activate prompts
+   - Per-user prompt customization
+6. **API Layer**: FastAPI routes with dependency injection
+   - Clean separation of concerns
+   - Automatic database session management
+7. **Streamlit UI**: Modular frontend with environment configuration
+   - Real-time chat interface
+   - System prompt management
+   - Session navigation
 
 ## Requirements
 
 - Python 3.13+
+- PostgreSQL 15+
 - [Ollama](https://ollama.ai/download) (if using the Ollama provider)
 - FastAPI & Uvicorn (backend)
 - Streamlit (frontend)
@@ -104,11 +236,33 @@ API_KEY=your-secure-api-key-here
 # Rate Limiting
 RATE_LIMIT_PER_HOUR=1000
 
-# API Configuration
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=postgres
+DB_USER=streamlitdemo
+DB_PASSWORD=streamlitdemo
+
+# Legacy File Paths (for migration)
 CHAT_HISTORY_DIR=chats
 SYSTEM_PROMPT_FILE=system_prompt.txt
 SYSTEM_PROMPTS_DIR=system_prompts
 ```
+
+### Database Setup
+
+1. **Local PostgreSQL Setup**:
+   ```bash
+   # Create database and user
+   createuser -U postgres streamlitdemo
+   createdb -U postgres postgres
+   
+   # Run the schema setup
+   psql -U streamlitdemo -d postgres -f sql/setup.sql
+   ```
+
+2. **Using Docker** (recommended):
+   The PostgreSQL database will be automatically initialized when using docker-compose.
 
 ## Setting Up Ollama
 
@@ -143,22 +297,23 @@ The Streamlit UI will be available at http://127.0.0.1:8501
 
 ### Using Docker Compose
 
-Set environment variables and run:
+Docker Compose will automatically start PostgreSQL, FastAPI, and Streamlit:
 
 ```bash
+# Using .env file (recommended)
+docker-compose up
+
+# Or with environment variables
 export API_KEY=your-secure-api-key-here
-export RATE_LIMIT_PER_HOUR=1000
 docker-compose up
 ```
 
-Or use the .env file:
-
-```bash
-docker-compose up
-```
-
+Services will be available at:
 - FastAPI backend: http://localhost:8000
 - Streamlit frontend: http://localhost:8501
+- PostgreSQL database: localhost:5432
+
+The database will be automatically initialized with the schema and seed data on first run.
 
 ## API Endpoints
 
@@ -339,7 +494,36 @@ Interactive API documentation is available at:
 - Swagger UI: http://127.0.0.1:8000/docs
 - ReDoc: http://127.0.0.1:8000/redoc
 
+## Database Schema
+
+The application uses the following database tables:
+
+- **users**: User accounts with API key management
+- **chats**: Chat sessions linked to users
+- **messages**: Individual messages within chats
+- **system_prompts**: Library of system prompts
+- **rate_limits**: Tracking API usage for rate limiting
+
+## Data Migration
+
+The application automatically migrates existing file-based data to PostgreSQL on startup:
+
+1. **System Prompts**: Migrated from `system_prompts/` directory
+2. **Chat History**: Migrated from `chats/` directory
+3. **Active System Prompt**: Migrated from `system_prompt.txt`
+
+All migrated data is associated with an anonymous user. After migration, users can create accounts for isolated data access.
+
 ## Troubleshooting
+
+### Database Connection Issues
+
+If you encounter database connection errors:
+
+1. Verify PostgreSQL is running: `pg_isready -h localhost -p 5432`
+2. Check credentials in `.env` file match your PostgreSQL setup
+3. Ensure the database exists: `psql -U streamlitdemo -l`
+4. For Docker users, check container status: `docker ps`
 
 ### Provider Issues
 
@@ -355,7 +539,17 @@ If the Streamlit frontend cannot connect to the FastAPI backend:
 
 1. Verify the API_URL environment variable is set correctly
 2. Ensure the backend is running and accessible
-3. Check network connectivity between services if using Docker
+3. Check that the API_KEY in `.env` is set for both services
+4. Check network connectivity between services if using Docker
+
+### Authentication Errors
+
+If you get 401 Unauthorized errors:
+
+1. Check the API_KEY in your `.env` file
+2. Ensure Streamlit has loaded the `.env` file (restart if needed)
+3. Verify the Bearer token format in API requests
+4. Check if the user's API key exists in the database
 
 ## License
 
