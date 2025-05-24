@@ -1,19 +1,26 @@
 import streamlit as st
 import requests
 import re
+import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def get_api_url():
     """Get API URL from environment or use default"""
-    import os
     return os.environ.get("API_URL", "http://localhost:8000")
 
 def get_headers():
     """Get headers with API key for authentication"""
-    import os
     api_key = os.environ.get("API_KEY", "")
     if api_key:
+        # Debug: Show first few chars of API key
+        print(f"Using API key: {api_key[:8]}...")
         return {"Authorization": f"Bearer {api_key}"}
+    else:
+        print("Warning: No API_KEY found in environment variables")
     return {}
 
 def send_message(user_input, chat_id=None):
@@ -103,7 +110,9 @@ def get_chat_history(chat_id):
             # Check if history data is valid
             if not history_data.get("success", False):
                 error_msg = history_data.get("error", "Unknown error retrieving chat history")
-                st.session_state.chat_error = error_msg
+                # Only set error if it's not a "not found" error
+                if "not found" not in error_msg.lower():
+                    st.session_state.chat_error = error_msg
                 return []
                 
             messages = history_data.get("history", {}).get("messages", [])
@@ -117,6 +126,11 @@ def get_chat_history(chat_id):
             return filtered_messages
         elif response.status_code == 404:
             # Chat ID not found, but not an error - just a new chat
+            # Don't set error state for 404s
+            return []
+        elif response.status_code == 403:
+            # Access denied
+            st.session_state.chat_error = "You do not have access to this chat"
             return []
         else:
             # Other errors should be reported

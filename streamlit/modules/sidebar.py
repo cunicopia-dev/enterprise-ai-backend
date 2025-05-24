@@ -1,15 +1,18 @@
 import streamlit as st
 import requests
+import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def get_api_url():
     """Get API URL from environment or use default"""
-    import os
     return os.environ.get("API_URL", "http://localhost:8000")
 
 def get_headers():
     """Get headers with API key for authentication"""
-    import os
     api_key = os.environ.get("API_KEY", "")
     if api_key:
         return {"Authorization": f"Bearer {api_key}"}
