@@ -25,6 +25,39 @@ SYSTEM_PROMPT_FILE = config.SYSTEM_PROMPT_FILE
 def create_tables():
     """Create database tables"""
     Base.metadata.create_all(bind=engine)
+    
+def run_sql_migrations(db: Session):
+    """Run SQL migration files for provider support"""
+    from sqlalchemy import text
+    
+    # SQL files to run
+    sql_files = [
+        "sql/03_multi_provider_schema.sql",
+        "sql/04_seed_providers.sql"
+    ]
+    
+    # Check if running in Docker
+    if os.path.exists("/app/sql"):
+        sql_files = [
+            "/app/sql/03_multi_provider_schema.sql",
+            "/app/sql/04_seed_providers.sql"
+        ]
+    
+    for sql_file in sql_files:
+        if os.path.exists(sql_file):
+            try:
+                # Read and execute SQL file
+                with open(sql_file, 'r') as f:
+                    sql_content = f.read()
+                    
+                # Execute the SQL
+                db.execute(text(sql_content))
+                db.commit()
+                print(f"Successfully executed {sql_file}")
+            except Exception as e:
+                print(f"Warning: Error running {sql_file}: {e}")
+                db.rollback()
+                # Continue anyway - tables might already exist
 
 def get_anonymous_user(db: Session) -> User:
     """Get or create the anonymous user for migration"""
@@ -271,6 +304,10 @@ def run_migration():
     db = SessionLocal()
     
     try:
+        # Run SQL migrations for provider support
+        run_sql_migrations(db)
+        print("SQL migrations for provider support completed.")
+        
         # Migrate system prompts
         system_prompt_mapping = migrate_system_prompts(db)
         print(f"Migrated {len(system_prompt_mapping)} system prompts.")
