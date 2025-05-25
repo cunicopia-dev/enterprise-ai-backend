@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-from utils.config import config
+from .config import config
 
 # Create SQLAlchemy engine with connection pool
 engine = create_engine(
