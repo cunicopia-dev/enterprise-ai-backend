@@ -1,3 +1,3 @@
-from utils.provider.ollama import OllamaProvider
+from .ollama import OllamaProvider
 
 __all__ = ["OllamaProvider"] 
