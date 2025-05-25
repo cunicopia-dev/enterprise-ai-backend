@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, Depends, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -24,6 +25,13 @@ from slowapi.errors import RateLimitExceeded
 import uvicorn
 from typing import Dict, Tuple
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    run_migration()
+    yield
+    # Shutdown (if needed)
+
 def create_app():
     # Validate configuration
     config.validate()
@@ -35,11 +43,12 @@ def create_app():
     provider = OllamaProvider(model_name="llama3.1:8b-instruct-q8_0")
     chat_interface = ChatInterfaceDB(provider=provider)
     
-    # Create FastAPI app
+    # Create FastAPI app with lifespan
     app = FastAPI(
         title="FastAPI Chat API",
         description="A chat API with LLM integration and system prompt management",
-        version="1.0.0"
+        version="1.0.0",
+        lifespan=lifespan
     )
     
     # Initialize rate limiter
@@ -57,11 +66,6 @@ def create_app():
             status_code=422,
             content={"detail": exc.errors(), "body": exc.body},
         )
-    
-    # Use the database migration tool on startup
-    @app.on_event("startup")
-    async def startup_event():
-        run_migration()
 
     @app.get("/")
     async def root():
