@@ -1,6 +1,10 @@
 import streamlit as st
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import modules
 from modules.sidebar import render_sidebar
