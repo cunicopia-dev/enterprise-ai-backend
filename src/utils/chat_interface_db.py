@@ -1,0 +1,458 @@
+"""
+Database-backed chat interface for interacting with the LLM provider.
+"""
+import os
+import json
+import uuid
+import re
+from datetime import datetime
+from typing import Dict, Any, Optional, List, Protocol, Tuple
+from fastapi import HTTPException, Depends
+from sqlalchemy.orm import Session
+
+from utils.config import config
+from utils.database import get_db
+from utils.repository.chat_repository import ChatRepository
+from utils.repository.message_repository import MessageRepository
+from utils.repository.user_repository import UserRepository
+from utils.system_prompt_db import SystemPromptManagerDB
+from utils.models.db_models import Chat, Message
+
+# For backwards compatibility during migration
+CHAT_HISTORY_DIR = config.CHAT_HISTORY_DIR
+
+class LLMProvider(Protocol):
+    """Protocol defining what a language model provider must implement"""
+    
+    async def generate_chat_response(self, messages: List[Dict[str, Any]], temperature: float = 0.7) -> Dict[str, Any]:
+        """
+        Generate a response from the language model based on conversation history.
+        
+        Args:
+            messages: List of message objects with role and content
+            temperature: Control randomness in generation
+            
+        Returns:
+            Dictionary containing response data
+        """
+        ...
+
+class ChatInterfaceDB:
+    """
+    Database-backed interface for chat functionality, abstracting away provider-specific implementation.
+    Handles chat management, persistence, and routing to the appropriate provider.
+    """
+    
+    def __init__(self, provider: LLMProvider):
+        """
+        Initialize with a specific provider implementation
+        
+        Args:
+            provider: The language model provider to use
+        """
+        self.provider = provider
+    
+    @staticmethod
+    def is_valid_chat_id(chat_id: str) -> bool:
+        """
+        Check if the chat_id is valid (contains only alphanumeric, dash and underscore)
+        
+        Args:
+            chat_id: The chat ID to validate
+            
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        # Enhanced validation to prevent directory traversal
+        if ".." in chat_id or "/" in chat_id or "\\" in chat_id:
+            return False
+        # Allow alphanumeric characters, dashes, and underscores, max 50 chars
+        return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', chat_id))
+    
+    @staticmethod
+    def get_or_create_default_user(db: Session) -> uuid.UUID:
+        """
+        Get or create a default user for anonymous chats
+        
+        Args:
+            db: Database session
+            
+        Returns:
+            uuid.UUID: User ID
+        """
+        user_repo = UserRepository(db)
+        default_user = user_repo.get_by_username("anonymous")
+        
+        if not default_user:
+            # Create a default anonymous user if it doesn't exist
+            default_user = user_repo.create_user(
+                username="anonymous",
+                email="anonymous@example.com",
+                password="anonymous",  # Will be hashed by the repository
+                is_admin=False
+            )
+        
+        return default_user.id
+    
+    async def chat_with_llm(
+        self, 
+        user_message: str, 
+        user_id: Optional[uuid.UUID], 
+        chat_id: Optional[str], 
+        db: Session
+    ) -> Dict[str, Any]:
+        """
+        Chat with the LLM using persistent chat history.
+        
+        Args:
+            user_message: User's input message
+            user_id: User ID (if authenticated)
+            chat_id: Chat ID to continue an existing conversation
+            db: Database session
+        
+        Returns:
+            Dict[str, Any]: Dictionary containing response and chat information
+        """
+        # Get repositories
+        chat_repo = ChatRepository(db)
+        message_repo = MessageRepository(db)
+        
+        # Get the system prompt
+        system_prompt = SystemPromptManagerDB.get_system_prompt(db)
+        
+        chat_entity = None
+        chat_uuid = None
+        created_new_chat = False
+        
+        # If we have a user_id, use it; otherwise get/create the default anonymous user
+        effective_user_id = user_id if user_id else self.get_or_create_default_user(db)
+        
+        # Handle chat_id
+        if chat_id:
+            # Validate custom chat_id if provided
+            if not self.is_valid_chat_id(chat_id):
+                return {
+                    "error": "Invalid chat ID. Use only alphanumeric characters, dashes, and underscores.",
+                    "success": False
+                }
+            
+            # Try to find existing chat with the custom ID
+            chat_entity = chat_repo.get_by_custom_id(chat_id)
+            
+            if not chat_entity:
+                # Create new chat with the custom ID
+                chat_entity = chat_repo.create_chat(
+                    user_id=effective_user_id,
+                    custom_id=chat_id,
+                    title=f"Chat {chat_id}"
+                )
+                created_new_chat = True
+        else:
+            # Generate a new UUID as chat_id
+            chat_id = str(uuid.uuid4())
+            
+            # Create new chat
+            chat_entity = chat_repo.create_chat(
+                user_id=effective_user_id,
+                custom_id=chat_id
+            )
+            created_new_chat = True
+        
+        # Store chat UUID for use later
+        chat_uuid = chat_entity.id
+        
+        # If new chat, add system message
+        if created_new_chat:
+            message_repo.create_message(
+                chat_id=chat_uuid,
+                role="system",
+                content=system_prompt
+            )
+        
+        # Add user message to history
+        message_repo.create_message(
+            chat_id=chat_uuid,
+            role="user",
+            content=user_message
+        )
+        
+        try:
+            # Get all messages for this chat
+            db_messages = message_repo.list_by_chat(chat_uuid)
+            
+            # Format messages for the provider
+            messages = [
+                {
+                    "role": msg.role,
+                    "content": msg.content
+                }
+                for msg in db_messages
+            ]
+            
+            # Use the provider to generate a response
+            response = await self.provider.generate_chat_response(messages)
+            
+            # Extract the response content based on provider's response format
+            if "message" in response and "content" in response["message"]:
+                assistant_response = response["message"]["content"]
+                
+                # Add assistant response to chat history
+                message_repo.create_message(
+                    chat_id=chat_uuid,
+                    role="assistant",
+                    content=assistant_response
+                )
+                
+                # Update chat's last modified time
+                chat_repo.update(chat_uuid, updated_at=datetime.now())
+                
+                # If it's a new chat and we didn't have a title, generate one from the first user message
+                if created_new_chat and not chat_entity.title:
+                    title = user_message[:30] + "..." if len(user_message) > 30 else user_message
+                    chat_repo.update(chat_uuid, title=title)
+                
+                return {
+                    "response": assistant_response,
+                    "chat_id": chat_id,
+                    "success": True
+                }
+            else:
+                return {
+                    "error": "No valid response received from provider",
+                    "chat_id": chat_id,
+                    "success": False
+                }
+        except Exception as e:
+            error_message = f"Unexpected error: {str(e)}"
+            return {
+                "error": error_message,
+                "chat_id": chat_id,
+                "success": False
+            }
+    
+    async def get_chat_history(
+        self, 
+        chat_id: Optional[str], 
+        user_id: Optional[uuid.UUID], 
+        db: Session
+    ) -> Dict[str, Any]:
+        """
+        Get chat history for a specific chat ID or list all chats.
+        
+        Args:
+            chat_id: Chat ID to retrieve. If None, return summary of all chats.
+            user_id: User ID (if authenticated)
+            db: Database session
+        
+        Returns:
+            Dict[str, Any]: Chat history information
+        """
+        chat_repo = ChatRepository(db)
+        
+        # Get effective user ID
+        effective_user_id = user_id if user_id else self.get_or_create_default_user(db)
+        
+        if chat_id:
+            # Find chat by custom ID
+            chat = chat_repo.get_by_custom_id_with_messages(chat_id)
+            
+            if chat:
+                # Check if user has access (chat belongs to user)
+                if chat.user_id != effective_user_id:
+                    return {
+                        "error": "You do not have access to this chat",
+                        "success": False
+                    }
+                
+                # Format chat for response
+                formatted_chat = chat_repo.format_chat_for_response(chat)
+                
+                return {
+                    "chat_id": chat_id,
+                    "history": formatted_chat,
+                    "success": True
+                }
+            else:
+                return {
+                    "error": f"Chat ID {chat_id} not found",
+                    "success": False
+                }
+        else:
+            # Get all chats for the user
+            chats = chat_repo.list_by_user(effective_user_id)
+            
+            # Format for response
+            formatted_chats = chat_repo.format_chats_list(chats)
+            
+            return {
+                "chats": formatted_chats,
+                "success": True
+            }
+    
+    async def delete_chat(
+        self, 
+        chat_id: str, 
+        user_id: Optional[uuid.UUID], 
+        db: Session
+    ) -> Dict[str, Any]:
+        """
+        Delete a chat history by ID.
+        
+        Args:
+            chat_id: The chat ID to delete
+            user_id: User ID (if authenticated)
+            db: Database session
+        
+        Returns:
+            Dict[str, Any]: Result of the operation
+        """
+        if not chat_id:
+            return {
+                "error": "Chat ID is required",
+                "success": False
+            }
+        
+        chat_repo = ChatRepository(db)
+        
+        # Get effective user ID
+        effective_user_id = user_id if user_id else self.get_or_create_default_user(db)
+        
+        # Find chat by custom ID
+        chat = chat_repo.get_by_custom_id(chat_id)
+        
+        if not chat:
+            return {
+                "error": f"Chat ID {chat_id} not found",
+                "success": False
+            }
+        
+        # Check if user has access (chat belongs to user)
+        if chat.user_id != effective_user_id:
+            return {
+                "error": "You do not have access to this chat",
+                "success": False
+            }
+        
+        # Delete the chat (cascade will delete messages)
+        success = chat_repo.delete(chat.id)
+        
+        if success:
+            return {
+                "message": f"Chat {chat_id} deleted successfully",
+                "success": True
+            }
+        else:
+            return {
+                "error": f"Error deleting chat {chat_id}",
+                "success": False
+            }
+    
+    # HTTP Handlers
+    
+    async def handle_chat_request(
+        self, 
+        request: Dict[str, Any], 
+        user_id: Optional[uuid.UUID], 
+        db: Session = Depends(get_db)
+    ) -> Dict[str, Any]:
+        """
+        Process a chat request by validating inputs and calling the chat function.
+        
+        Args:
+            request: The request data containing the message and optional chat_id
+            user_id: User ID (if authenticated)
+            db: Database session
+            
+        Returns:
+            Dict[str, Any]: The response from the LLM
+            
+        Raises:
+            HTTPException: If the request is invalid
+        """
+        if "message" not in request:
+            raise HTTPException(status_code=400, detail="Message field is required")
+        
+        user_message = request["message"]
+        if not user_message or not isinstance(user_message, str):
+            raise HTTPException(status_code=400, detail="Message must be a non-empty string")
+        
+        # Optional chat_id for continuing a conversation
+        chat_id = request.get("chat_id")
+        
+        # If chat_id is provided, validate it
+        if chat_id and not self.is_valid_chat_id(chat_id):
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid chat ID. Use only alphanumeric characters, dashes, and underscores."
+            )
+        
+        response = await self.chat_with_llm(user_message, user_id, chat_id, db)
+        
+        if not response.get("success", False) and "error" in response:
+            raise HTTPException(status_code=400, detail=response["error"])
+            
+        return response
+    
+    async def handle_get_chat_history(
+        self, 
+        chat_id: Optional[str], 
+        user_id: Optional[uuid.UUID], 
+        db: Session = Depends(get_db)
+    ) -> Dict[str, Any]:
+        """
+        Process a request to get chat history, validating inputs.
+        
+        Args:
+            chat_id: Chat ID to retrieve. If None, return summary of all chats.
+            user_id: User ID (if authenticated)
+            db: Database session
+            
+        Returns:
+            Dict[str, Any]: Chat history information
+            
+        Raises:
+            HTTPException: If the request is invalid or the chat history is not found
+        """
+        if chat_id and not self.is_valid_chat_id(chat_id):
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid chat ID. Use only alphanumeric characters, dashes, and underscores."
+            )
+            
+        result = await self.get_chat_history(chat_id, user_id, db)
+        if not result.get("success", False):
+            status_code = 404 if "not found" in result.get("error", "") else 403
+            raise HTTPException(status_code=status_code, detail=result.get("error", "Chat history not found"))
+        return result
+    
+    async def handle_delete_chat(
+        self, 
+        chat_id: str, 
+        user_id: Optional[uuid.UUID], 
+        db: Session = Depends(get_db)
+    ) -> Dict[str, Any]:
+        """
+        Process a request to delete chat history, validating inputs.
+        
+        Args:
+            chat_id: The chat ID to delete
+            user_id: User ID (if authenticated)
+            db: Database session
+            
+        Returns:
+            Dict[str, Any]: Result of the operation
+            
+        Raises:
+            HTTPException: If the request is invalid or the chat is not found
+        """
+        if not self.is_valid_chat_id(chat_id):
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid chat ID. Use only alphanumeric characters, dashes, and underscores."
+            )
+            
+        result = await self.delete_chat(chat_id, user_id, db)
+        if not result.get("success", False):
+            status_code = 404 if "not found" in result.get("error", "") else 403
+            raise HTTPException(status_code=status_code, detail=result.get("error", "Chat history not found"))
+        return result
