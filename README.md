@@ -4,6 +4,28 @@ A modern FastAPI application with PostgreSQL database integration, multiple endp
 
 ![FastAPI](https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png)
 
+## Table of Contents
+
+- [Project Structure](#project-structure)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Setting Up Ollama](#setting-up-ollama)
+- [Running the Application](#running-the-application)
+- [Testing](#testing)
+- [API Endpoints](#api-endpoints)
+- [Using the Chat Endpoint](#using-the-chat-endpoint)
+- [Managing System Prompts](#managing-system-prompts)
+- [Streamlit User Interface](#streamlit-user-interface)
+- [Extending the Application](#extending-the-application)
+- [API Documentation](#api-documentation)
+- [Database Schema](#database-schema)
+- [Data Migration](#data-migration)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
 ## Project Structure
 
 ```
@@ -32,6 +54,17 @@ A modern FastAPI application with PostgreSQL database integration, multiple endp
 │       ├── health.py    # Health check functionality
 │       ├── migration.py # Database migration utilities
 │       └── system_prompt_db.py # Database-backed system prompt management
+├── tests/               # Test suite
+│   ├── __init__.py
+│   ├── conftest.py      # Shared test fixtures and configuration
+│   ├── unit/            # Unit tests for isolated components
+│   ├── integration/     # Integration tests for component interactions
+│   └── api/             # API endpoint tests
+├── docs/                # Documentation
+│   ├── README.md        # Documentation index
+│   ├── testing-strategy.md # Comprehensive testing approach
+│   ├── testing-quickstart.md # Quick start guide for testing
+│   └── multi-provider-integration-plan.md # Plan for multiple LLM providers
 ├── sql/                 # Database SQL scripts
 │   ├── 01_schema.sql    # Database schema definition
 │   ├── 02_seed_data.sql # Initial seed data
@@ -48,6 +81,8 @@ A modern FastAPI application with PostgreSQL database integration, multiple endp
 ├── system_prompts/      # Legacy directory for file-based system prompts
 ├── requirements.fastapi.txt # Python dependencies for FastAPI backend
 ├── requirements.streamlit.txt # Python dependencies for Streamlit frontend
+├── requirements.test.txt # Python dependencies for testing
+├── pytest.ini           # Pytest configuration
 ├── Dockerfile.fastapi   # Docker configuration for FastAPI backend
 ├── Dockerfile.streamlit # Docker configuration for Streamlit frontend
 ├── docker-compose.yml   # Docker Compose for running all services
@@ -75,6 +110,7 @@ A modern FastAPI application with PostgreSQL database integration, multiple endp
 - 🧩 **Modular Architecture**: Clean separation of concerns with repository pattern
 - 🐳 **Docker Support**: Complete containerization with PostgreSQL included
 - 🔄 **Automatic Migration**: Seamless migration from file-based to database storage
+- 🧪 **Comprehensive Testing**: Unit, integration, and API tests with pytest framework
 
 ## Architecture
 
@@ -225,6 +261,12 @@ pip install -r requirements.fastapi.txt
 pip install -r requirements.streamlit.txt
 ```
 
+### Testing Dependencies (Optional)
+
+```bash
+pip install -r requirements.test.txt
+```
+
 ### Configuration
 
 Create a `.env` file in the project root:
@@ -314,6 +356,109 @@ Services will be available at:
 - PostgreSQL database: localhost:5432
 
 The database will be automatically initialized with the schema and seed data on first run.
+
+## Testing
+
+The application includes a comprehensive test suite using pytest for ensuring code quality and reliability.
+
+### Test Structure
+
+```
+tests/
+├── conftest.py          # Shared fixtures and test configuration
+├── unit/                # Unit tests for isolated components
+├── integration/         # Integration tests for component interactions
+└── api/                 # API endpoint tests
+```
+
+### Installing Test Dependencies
+
+```bash
+pip install -r requirements.test.txt
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run tests with verbose output
+pytest -v
+
+# Run only unit tests
+pytest -m unit
+
+# Run tests with coverage report
+pytest --cov=src --cov-report=html
+
+# Run specific test file
+pytest tests/unit/test_models.py
+
+# Run tests in parallel (requires pytest-xdist)
+pytest -n auto
+```
+
+### Test Configuration
+
+The test configuration is defined in `pytest.ini`:
+- Automatic async test discovery and execution
+- Test markers for categorizing tests (unit, integration, api)
+- Configured to handle asyncio properly
+
+### Writing Tests
+
+Example test structure:
+
+```python
+# tests/unit/test_example.py
+import pytest
+from src.utils.models.api_models import ChatRequest
+
+class TestChatRequest:
+    def test_valid_message(self):
+        request = ChatRequest(message="Hello!")
+        assert request.message == "Hello!"
+    
+    @pytest.mark.asyncio
+    async def test_async_operation(self):
+        # Test async functions with pytest.mark.asyncio
+        result = await some_async_function()
+        assert result is not None
+```
+
+### Test Coverage
+
+To generate and view coverage reports:
+
+```bash
+# Generate HTML coverage report
+pytest --cov=src --cov-report=html
+
+# View coverage report
+open htmlcov/index.html  # macOS
+xdg-open htmlcov/index.html  # Linux
+```
+
+### Continuous Integration
+
+The test suite is designed to run in CI/CD pipelines. Tests are organized by speed:
+- Unit tests: Fast, isolated tests that run first
+- Integration tests: Tests that interact with the database
+- API tests: Full endpoint tests with authentication
+
+### Testing Best Practices
+
+1. **Isolation**: Each test should be independent and not affect others
+2. **Fixtures**: Use pytest fixtures for reusable test data and setup
+3. **Mocking**: Mock external services (like LLM providers) to avoid API calls
+4. **Database**: Tests use transactions that rollback to keep the test database clean
+5. **Async**: Use `@pytest.mark.asyncio` for async test functions
+
+For more detailed testing documentation, see:
+- [Testing Strategy](docs/testing-strategy.md) - Comprehensive testing approach
+- [Testing Quick Start](docs/testing-quickstart.md) - Get started with testing quickly
+- [Testing AI Providers](docs/testing-ai-providers.md) - Testing LLM provider integrations
 
 ## API Endpoints
 
