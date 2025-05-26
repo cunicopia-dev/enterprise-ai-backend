@@ -8,6 +8,12 @@ import logging
 
 from .base import BaseProvider, ProviderConfig, ProviderError
 from .ollama import OllamaProvider
+try:
+    from .anthropic import AnthropicProvider
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+    AnthropicProvider = None
 from utils.database import SessionLocal
 from utils.repository.provider_repository import ProviderRepository
 from utils.models.db_models import ProviderConfig as DBProviderConfig
@@ -28,11 +34,15 @@ class ProviderManager:
         self._providers: Dict[str, BaseProvider] = {}
         self._provider_classes: Dict[str, Type[BaseProvider]] = {
             "ollama": OllamaProvider,
-            # Future providers will be added here:
-            # "anthropic": AnthropicProvider,
-            # "openai": OpenAIProvider,
-            # "google": GeminiProvider,
         }
+        
+        # Add Anthropic if available
+        if ANTHROPIC_AVAILABLE and AnthropicProvider:
+            self._provider_classes["anthropic"] = AnthropicProvider
+        
+        # Future providers will be added here:
+        # "openai": OpenAIProvider,
+        # "google": GeminiProvider,
         self._db = db
         self._default_provider: Optional[str] = None
         self._initialized = False
