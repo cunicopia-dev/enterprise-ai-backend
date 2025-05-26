@@ -1,6 +1,6 @@
-# FastAPI with LLM Provider Integration
+# FastAPI with Multi-Provider LLM Integration
 
-A modern FastAPI application with PostgreSQL database integration, multiple endpoints including LLM capabilities with pluggable provider support, and a user-friendly Streamlit frontend.
+A modern FastAPI application with PostgreSQL database integration, multiple LLM provider support (Ollama, Anthropic, OpenAI, Google), comprehensive API endpoints, and a user-friendly Streamlit frontend.
 
 ![FastAPI](https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png)
 
@@ -94,11 +94,13 @@ A modern FastAPI application with PostgreSQL database integration, multiple endp
 
 - 🚀 **Modern FastAPI Framework**: High-performance, easy to learn, fast to code
 - 🐘 **PostgreSQL Database**: Robust relational database for data persistence
-- 🔄 **Health Check Endpoint**: Monitor application status
+- 🔄 **Health Check Endpoint**: Monitor application and provider status
 - 🔐 **Database-Backed Authentication**: Secure endpoints with user management and API keys
 - 🛡️ **Rate Limiting**: Database-tracked rate limiting per user
 - ✅ **Input Validation**: Comprehensive validation of all user inputs
-- 🤖 **Pluggable LLM Providers**: Easily switch between different LLM providers
+- 🤖 **Multi-Provider LLM Support**: Seamlessly switch between Ollama, Anthropic, OpenAI, and Google
+- 🔌 **Provider Management**: Dynamic provider selection with database configuration
+- 📊 **Usage Tracking**: Monitor token usage and costs per provider/model
 - 💾 **Scalable Data Storage**: PostgreSQL database with proper indexing
 - 👥 **Multi-User Support**: Each user has isolated chat sessions
 - 🆔 **Custom Chat IDs**: Use your own identifiers for conversation tracking
@@ -114,7 +116,7 @@ A modern FastAPI application with PostgreSQL database integration, multiple endp
 
 ## Architecture
 
-The application follows a modular architecture with the following key components:
+The application follows a modular architecture with multi-provider LLM support:
 
 ```mermaid
 graph TB
@@ -141,11 +143,22 @@ graph TB
     subgraph "Business Logic Layer"
         ChatInterface[Chat Interface]
         SystemPromptMgr[System Prompt<br/>Manager]
-        LLMProvider[LLM Provider<br/>Interface]
-        Ollama[Ollama<br/>Provider]
+        ProviderMgr[Provider<br/>Manager]
         
-        ChatInterface --> LLMProvider
-        LLMProvider --> Ollama
+        subgraph "LLM Providers"
+            BaseProvider[Base Provider<br/>Interface]
+            Ollama[Ollama<br/>Provider]
+            Anthropic[Anthropic<br/>Provider]
+            OpenAI[OpenAI<br/>Provider]
+            Google[Google<br/>Provider]
+        end
+        
+        ChatInterface --> ProviderMgr
+        ProviderMgr --> BaseProvider
+        BaseProvider --> Ollama
+        BaseProvider --> Anthropic
+        BaseProvider --> OpenAI
+        BaseProvider --> Google
     end
     
     subgraph "Data Access Layer"
@@ -154,6 +167,8 @@ graph TB
         MessageRepo[Message<br/>Repository]
         PromptRepo[System Prompt<br/>Repository]
         RateLimitRepo[Rate Limit<br/>Repository]
+        ProviderRepo[Provider<br/>Repository]
+        UsageRepo[Usage<br/>Repository]
     end
     
     subgraph "Database Layer"
@@ -163,16 +178,25 @@ graph TB
         Messages[Messages Table]
         SystemPrompts[System Prompts<br/>Table]
         RateLimits[Rate Limits<br/>Table]
+        ProviderConfigs[Provider Configs<br/>Table]
+        ProviderModels[Provider Models<br/>Table]
+        ProviderUsage[Provider Usage<br/>Table]
         
         PostgreSQL --> Users
         PostgreSQL --> Chats
         PostgreSQL --> Messages
         PostgreSQL --> SystemPrompts
         PostgreSQL --> RateLimits
+        PostgreSQL --> ProviderConfigs
+        PostgreSQL --> ProviderModels
+        PostgreSQL --> ProviderUsage
     end
     
     subgraph "External Services"
         OllamaService[Ollama Service<br/>:11434]
+        AnthropicAPI[Anthropic API]
+        OpenAIAPI[OpenAI API]
+        GoogleAPI[Google API]
     end
     
     %% Connections
@@ -182,60 +206,87 @@ graph TB
     
     FastAPI --> ChatInterface
     FastAPI --> SystemPromptMgr
+    FastAPI --> ProviderMgr
     
     ChatInterface --> ChatRepo
     ChatInterface --> MessageRepo
     SystemPromptMgr --> PromptRepo
     Auth --> UserRepo
     RateLimit --> RateLimitRepo
+    ProviderMgr --> ProviderRepo
+    ProviderMgr --> UsageRepo
     
     UserRepo --> PostgreSQL
     ChatRepo --> PostgreSQL
     MessageRepo --> PostgreSQL
     PromptRepo --> PostgreSQL
     RateLimitRepo --> PostgreSQL
+    ProviderRepo --> PostgreSQL
+    UsageRepo --> PostgreSQL
     
     Ollama --> |HTTP| OllamaService
+    Anthropic --> |HTTPS| AnthropicAPI
+    OpenAI --> |HTTPS| OpenAIAPI
+    Google --> |HTTPS| GoogleAPI
     
     %% Styling
     classDef frontend fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
     classDef api fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000
     classDef business fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000
+    classDef provider fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#000
     classDef data fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
     classDef database fill:#fce4ec,stroke:#880e4f,stroke-width:2px,color:#000
     classDef external fill:#f5f5f5,stroke:#424242,stroke-width:2px,color:#000
     
     class UI,UI_Chat,UI_Prompts,UI_Sidebar frontend
     class FastAPI,Auth,RateLimit api
-    class ChatInterface,SystemPromptMgr,LLMProvider,Ollama business
-    class UserRepo,ChatRepo,MessageRepo,PromptRepo,RateLimitRepo data
-    class PostgreSQL,Users,Chats,Messages,SystemPrompts,RateLimits database
-    class OllamaService external
+    class ChatInterface,SystemPromptMgr,ProviderMgr business
+    class BaseProvider,Ollama,Anthropic,OpenAI,Google provider
+    class UserRepo,ChatRepo,MessageRepo,PromptRepo,RateLimitRepo,ProviderRepo,UsageRepo data
+    class PostgreSQL,Users,Chats,Messages,SystemPrompts,RateLimits,ProviderConfigs,ProviderModels,ProviderUsage database
+    class OllamaService,AnthropicAPI,OpenAIAPI,GoogleAPI external
 ```
 
 ### Architecture Components:
 
 1. **Database Layer**: PostgreSQL database with SQLAlchemy ORM
-   - Users, Chats, Messages, System Prompts, and Rate Limits tables
+   - Core tables: Users, Chats, Messages, System Prompts, Rate Limits
+   - Provider tables: Provider Configs, Provider Models, Provider Usage
    - Repository pattern for clean data access
    - Connection pooling for performance
+   
 2. **Authentication Layer**: Database-backed user and API key management
    - Support for multiple users with isolated data
    - API key generation and validation
-3. **Chat Interface**: Core module that handles chat history management
+   - Rate limiting per user
+   
+3. **Provider Management Layer**: Multi-provider LLM support
+   - **Provider Manager**: Central orchestrator for all LLM providers
+   - **Base Provider Interface**: Standardized API for all providers
+   - **Provider Implementations**: Ollama, Anthropic, OpenAI, Google
+   - **Dynamic Configuration**: Database-backed provider settings
+   - **Usage Tracking**: Monitor tokens and costs per provider/model
+   
+4. **Chat Interface**: Core module that handles conversations
    - Database persistence for all conversations
+   - Multi-provider support with dynamic selection
    - User isolation and access control
-4. **LLM Providers**: Pluggable implementations for different LLM services
-   - Currently supports Ollama
-   - Designed to easily add other providers like OpenAI, Anthropic, etc.
+   - Provider/model tracking per message
+   
 5. **System Prompt Manager**: Database-backed prompt library
    - Create, update, delete, and activate prompts
    - Per-user prompt customization
+   - Default prompts for quick start
+   
 6. **API Layer**: FastAPI routes with dependency injection
-   - Clean separation of concerns
-   - Automatic database session management
-7. **Streamlit UI**: Modular frontend with environment configuration
-   - Real-time chat interface
+   - Provider management endpoints
+   - Chat endpoints with provider selection
+   - System prompt management
+   - Health checks for all providers
+   
+7. **Streamlit UI**: Modular frontend with provider selection
+   - Real-time chat interface with model selection
+   - Provider and model management
    - System prompt management
    - Session navigation
 
@@ -284,6 +335,11 @@ DB_PORT=5432
 DB_NAME=postgres
 DB_USER=streamlitdemo
 DB_PASSWORD=streamlitdemo
+
+# Provider API Keys (optional, only needed for specific providers)
+ANTHROPIC_API_KEY=your-anthropic-api-key
+OPENAI_API_KEY=your-openai-api-key
+GOOGLE_API_KEY=your-google-api-key
 
 # Legacy File Paths (for migration)
 CHAT_HISTORY_DIR=chats
@@ -480,7 +536,9 @@ The application has the following endpoints:
    ```json
    {
      "message": "Tell me a fun fact about space",
-     "chat_id": "optional-chat-id-for-continuing-conversation"
+     "chat_id": "optional-chat-id-for-continuing-conversation",
+     "provider": "ollama",  // optional, defaults to user's default
+     "model": "llama3.1:8b-instruct-q8_0"  // optional, defaults to provider's default
    }
    ```
 
@@ -517,6 +575,12 @@ The application has the following endpoints:
 13. `DELETE /system-prompts/{prompt_id}` - Delete a specific system prompt
 14. `POST /system-prompts/{prompt_id}/activate` - Set a specific system prompt as the active one
 
+### Provider Management Endpoints
+
+15. `GET /providers` - Get all available providers and their status
+16. `GET /providers/{provider}/models` - Get available models for a specific provider
+17. `GET /providers/{provider}/health` - Check health status of a specific provider
+
 ## Using the Chat Endpoint
 
 ### Starting a New Conversation
@@ -539,6 +603,21 @@ curl -X POST http://localhost:8000/chat \
   -H "Authorization: Bearer your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{"message": "Tell me more about stars", "chat_id": "space-facts"}'
+```
+
+### Using Different Providers and Models
+
+Specify a provider and model to use a specific LLM:
+
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Authorization: Bearer your-api-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Write a haiku about technology",
+    "provider": "anthropic",
+    "model": "claude-4-opus-20250114"
+  }'
 ```
 
 ## Managing System Prompts
@@ -579,6 +658,29 @@ curl -X POST http://localhost:8000/system-prompts/customer-support/activate \
   -H "Authorization: Bearer your-api-key-here"
 ```
 
+## Managing Providers
+
+### List Available Providers
+
+```bash
+curl -X GET http://localhost:8000/providers \
+  -H "Authorization: Bearer your-api-key-here"
+```
+
+### Get Models for a Provider
+
+```bash
+curl -X GET http://localhost:8000/providers/ollama/models \
+  -H "Authorization: Bearer your-api-key-here"
+```
+
+### Check Provider Health
+
+```bash
+curl -X GET http://localhost:8000/providers/ollama/health \
+  -H "Authorization: Bearer your-api-key-here"
+```
+
 ## Streamlit User Interface
 
 The project includes a modern Streamlit-based web interface organized into modules for better maintainability:
@@ -588,15 +690,18 @@ The project includes a modern Streamlit-based web interface organized into modul
 - **Modular Architecture**: Separated into chat, prompts, and sidebar modules
 - **Dark Mode**: Elegant dark theme with customizable appearance
 - **Chat Interface**: User-friendly chat interface with message history
+- **Multi-Provider Support**: Select from available LLM providers and models
 - **System Prompt Management**: Create, edit, delete, and activate system prompts
 - **Session Management**: Switch between different chat sessions
+- **Provider Monitoring**: View provider status and available models
 - **Responsive Design**: Optimized for different screen sizes
 
 ### Using the Streamlit UI
 
 1. **Chat Tab**: Main conversation interface
    - Enter session ID (optional) or start without one
-   - View conversation history
+   - Select provider and model from available options
+   - View conversation history with provider/model indicators
    - Send messages and receive responses
    - Clear or delete conversations
 
@@ -612,6 +717,8 @@ The project includes a modern Streamlit-based web interface organized into modul
    - Create new chat sessions
    - Switch between existing sessions
    - View and edit active system prompt
+   - Monitor provider status
+   - View available models per provider
 
 ## Extending the Application
 
@@ -619,10 +726,21 @@ The project includes a modern Streamlit-based web interface organized into modul
 
 The system is designed to be easily extended with new LLM providers:
 
-1. Create a new file in the `src/utils/provider/` directory
-2. Implement the provider class following the `LLMProvider` protocol
-3. Update the import in `src/utils/provider/__init__.py`
-4. Change the provider initialization in `src/main.py`
+1. Create a new provider class in `src/utils/provider/` that inherits from `BaseProvider`
+2. Implement required methods: `chat_completion`, `list_models`, `health_check`
+3. Register the provider in `ProviderManager._provider_classes`
+4. Add provider configuration to the database seed data
+5. Set the appropriate API key in your `.env` file
+
+Example provider implementation:
+```python
+from utils.provider.base import BaseProvider, ChatResponse
+
+class NewProvider(BaseProvider):
+    async def chat_completion(self, messages, model, **kwargs) -> ChatResponse:
+        # Implement API call to your provider
+        pass
+```
 
 ### Extending the Streamlit UI
 
@@ -643,11 +761,17 @@ Interactive API documentation is available at:
 
 The application uses the following database tables:
 
+### Core Tables
 - **users**: User accounts with API key management
-- **chats**: Chat sessions linked to users
-- **messages**: Individual messages within chats
+- **chats**: Chat sessions linked to users, with provider/model tracking
+- **messages**: Individual messages within chats, with provider/model per message
 - **system_prompts**: Library of system prompts
 - **rate_limits**: Tracking API usage for rate limiting
+
+### Provider Tables
+- **provider_configs**: Configuration for each LLM provider
+- **provider_models**: Available models for each provider
+- **provider_usage**: Token usage and cost tracking per provider/model
 
 ## Data Migration
 
@@ -672,11 +796,17 @@ If you encounter database connection errors:
 
 ### Provider Issues
 
-If you encounter Ollama-specific errors:
-
+#### Ollama Provider
 1. Ensure the Ollama service is running (`ps aux | grep ollama`)
 2. Verify you have pulled the required model (`ollama list`)
 3. Check for firewall issues blocking access to the Ollama server (port 11434)
+
+#### API-based Providers (Anthropic, OpenAI, Google)
+1. Verify API keys are set correctly in `.env` file
+2. Check API key permissions and quotas
+3. Ensure network connectivity to provider APIs
+4. Monitor rate limits and usage quotas
+5. Check provider status pages for service interruptions
 
 ### Frontend-Backend Connection
 
