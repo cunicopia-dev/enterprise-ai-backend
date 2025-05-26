@@ -1,4 +1,24 @@
 services:
+  db:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/app/sql
+      - ./sql/docker-init.sh:/docker-entrypoint-initdb.d/init.sh
+    environment:
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-streamlitdemo}
+      - POSTGRES_USER=${DB_USER:-streamlitdemo}
+      - POSTGRES_DB=${DB_NAME:-postgres}
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streamlitdemo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: .
@@ -10,12 +30,28 @@ services:
       - ./system_prompt.txt:/app/system_prompt.txt
       - ./base_system_prompt.txt:/app/base_system_prompt.txt
       - ./system_prompts:/app/system_prompts
+      - ./sql:/app/sql
     environment:
+      # Legacy file paths (kept for migration)
       - CHAT_HISTORY_DIR=/app/chats
       - SYSTEM_PROMPT_FILE=/app/system_prompt.txt
       - SYSTEM_PROMPTS_DIR=/app/system_prompts
+      
+      # API Security
+      - API_KEY=${API_KEY}
+      - RATE_LIMIT_PER_HOUR=${RATE_LIMIT_PER_HOUR:-1000}
+      
+      # Database Configuration
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_USER=${DB_USER:-streamlitdemo}
+      - DB_PASSWORD=${DB_PASSWORD:-streamlitdemo}
     networks:
       - app-network
+    depends_on:
+      db:
+        condition: service_healthy
 
   streamlit:
     build:
@@ -29,9 +65,13 @@ services:
       - ./base_system_prompt.txt:/app/base_system_prompt.txt
     environment:
       - API_URL=http://api:8000
+      - API_KEY=${API_KEY}
     networks:
       - app-network
 
 networks:
   app-network:
-    driver: bridge 
+    driver: bridge
+
+volumes:
+  postgres_data: 

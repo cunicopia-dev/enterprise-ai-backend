@@ -1,16 +1,27 @@
 import streamlit as st
 import requests
+import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def get_api_url():
     """Get API URL from environment or use default"""
-    import os
     return os.environ.get("API_URL", "http://localhost:8000")
+
+def get_headers():
+    """Get headers with API key for authentication"""
+    api_key = os.environ.get("API_KEY", "")
+    if api_key:
+        return {"Authorization": f"Bearer {api_key}"}
+    return {}
 
 def get_system_prompt():
     """Get the active system prompt from API"""
     try:
-        response = requests.get(f"{get_api_url()}/system-prompt")
+        response = requests.get(f"{get_api_url()}/system-prompt", headers=get_headers())
         if response.status_code == 200:
             return response.json().get("prompt", "")
         else:
@@ -21,7 +32,7 @@ def get_system_prompt():
 def get_system_prompts():
     """Get all available system prompts"""
     try:
-        response = requests.get(f"{get_api_url()}/system-prompts")
+        response = requests.get(f"{get_api_url()}/system-prompts", headers=get_headers())
         if response.status_code == 200:
             return response.json().get("prompts", {})
         else:
@@ -32,7 +43,7 @@ def get_system_prompts():
 def activate_prompt(prompt_id):
     """Activate a system prompt"""
     try:
-        response = requests.post(f"{get_api_url()}/system-prompts/{prompt_id}/activate")
+        response = requests.post(f"{get_api_url()}/system-prompts/{prompt_id}/activate", headers=get_headers())
         return response.status_code == 200
     except Exception:
         return False
@@ -53,7 +64,7 @@ def get_active_prompt_id():
 def get_all_chats():
     """Get all chats from API"""
     try:
-        response = requests.get(f"{get_api_url()}/chat/history")
+        response = requests.get(f"{get_api_url()}/chat/history", headers=get_headers())
         if response.status_code == 200:
             return response.json().get("chats", {})
         else:
@@ -64,7 +75,7 @@ def get_all_chats():
 def delete_chat(chat_id):
     """Delete a chat from API"""
     try:
-        response = requests.delete(f"{get_api_url()}/chat/delete/{chat_id}")
+        response = requests.delete(f"{get_api_url()}/chat/delete/{chat_id}", headers=get_headers())
         return response.status_code == 200
     except Exception:
         return False
@@ -77,8 +88,16 @@ def reset_chat_session():
 
 def select_chat(chat_id):
     """Set the current chat session ID and clear messages to reload"""
-    st.session_state.current_chat_id = chat_id
-    st.session_state.current_chat_messages = [] # Clear to reload
+    # Only reset if we're selecting a different chat
+    if st.session_state.current_chat_id != chat_id:
+        st.session_state.current_chat_id = chat_id
+        st.session_state.current_chat_messages = [] # Clear to reload
+        
+        # Mark that we need to load the chat
+        st.session_state.load_chat_requested = True
+        
+        # Remove any error state when changing chats
+        st.session_state.chat_error = None
 
 def render_sidebar():
     """Render the sidebar content"""
@@ -186,6 +205,8 @@ def render_sidebar():
                 with col1:
                     if st.button(short_id, key=f"select_{chat['chat_id']}", help=chat["chat_id"]):
                         select_chat(chat['chat_id'])
+                        # Force rerun immediately to trigger chat loading
+                        st.rerun()
                 with col2:
                     if st.button("×", key=f"delete_{chat['chat_id']}", help="Delete session"):
                         if delete_chat(chat["chat_id"]):

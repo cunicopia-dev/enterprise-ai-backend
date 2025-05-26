@@ -4,10 +4,11 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from fastapi import HTTPException
+from .config import config
 
 # Directory for storing system prompts
-SYSTEM_PROMPTS_DIR = os.environ.get("SYSTEM_PROMPTS_DIR", "system_prompts")
-ACTIVE_PROMPT_FILE = os.environ.get("SYSTEM_PROMPT_FILE", "system_prompt.txt")
+SYSTEM_PROMPTS_DIR = config.SYSTEM_PROMPTS_DIR
+ACTIVE_PROMPT_FILE = config.SYSTEM_PROMPT_FILE
 
 class SystemPromptManager:
     """

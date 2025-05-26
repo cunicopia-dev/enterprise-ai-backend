@@ -1,12 +1,27 @@
 import streamlit as st
 import requests
 import re
+import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def get_api_url():
     """Get API URL from environment or use default"""
-    import os
     return os.environ.get("API_URL", "http://localhost:8000")
+
+def get_headers():
+    """Get headers with API key for authentication"""
+    api_key = os.environ.get("API_KEY", "")
+    if api_key:
+        # Debug: Show first few chars of API key
+        print(f"Using API key: {api_key[:8]}...")
+        return {"Authorization": f"Bearer {api_key}"}
+    else:
+        print("Warning: No API_KEY found in environment variables")
+    return {}
 
 def send_message(user_input, chat_id=None):
     """Send a message to the API and get the response"""
@@ -15,42 +30,126 @@ def send_message(user_input, chat_id=None):
         payload["chat_id"] = chat_id
     
     try:
-        response = requests.post(f"{get_api_url()}/chat", json=payload)
+        # Add timeout to prevent hanging
+        response = requests.post(
+            f"{get_api_url()}/chat", 
+            json=payload, 
+            headers=get_headers(),
+            timeout=30  # Allow longer timeout for LLM processing
+        )
+        
         if response.status_code == 200:
             data = response.json()
+            
+            # Verify we got a valid response
+            if "response" not in data:
+                return {
+                    "success": False,
+                    "error": "API returned success but no response content",
+                }
+                
+            print(f"Message sent successfully, got response with {len(data.get('response', ''))} chars")
+            
             return {
                 "success": True,
                 "response": data.get("response", ""),
                 "chat_id": data.get("chat_id", chat_id)
             }
-        else:
+        elif response.status_code == 401:
             return {
                 "success": False,
-                "error": f"Error: {response.status_code}",
+                "error": "Authentication error. Check API key.",
             }
+        elif response.status_code == 429:
+            return {
+                "success": False,
+                "error": "Rate limit exceeded. Please try again later.",
+            }
+        else:
+            # Try to extract detailed error message from response
+            try:
+                error_detail = response.json().get("detail", f"Status code: {response.status_code}")
+                return {
+                    "success": False,
+                    "error": f"API Error: {error_detail}",
+                }
+            except:
+                return {
+                    "success": False,
+                    "error": f"API Error: Status code {response.status_code}",
+                }
+    except requests.exceptions.Timeout:
+        return {
+            "success": False,
+            "error": "Request timed out. The API might be overloaded.",
+        }
+    except requests.exceptions.ConnectionError:
+        return {
+            "success": False,
+            "error": "Connection error. Is the API server running?",
+        }
     except Exception as e:
         return {
             "success": False,
-            "error": f"Error connecting to API: {str(e)[:50]}...",
+            "error": f"Error connecting to API: {str(e)[:100]}...",
         }
 
 def get_chat_history(chat_id):
     """Get chat history from API"""
     try:
-        response = requests.get(f"{get_api_url()}/chat/history/{chat_id}")
+        # Add a timeout to prevent hanging
+        response = requests.get(
+            f"{get_api_url()}/chat/history/{chat_id}", 
+            headers=get_headers(),
+            timeout=10
+        )
+        
         if response.status_code == 200:
-            messages = response.json().get("history", {}).get("messages", [])
+            history_data = response.json()
+            
+            # Check if history data is valid
+            if not history_data.get("success", False):
+                error_msg = history_data.get("error", "Unknown error retrieving chat history")
+                # Only set error if it's not a "not found" error
+                if "not found" not in error_msg.lower():
+                    st.session_state.chat_error = error_msg
+                return []
+                
+            messages = history_data.get("history", {}).get("messages", [])
+            
             # Filter out system message
-            return [msg for msg in messages if msg["role"] != "system"]
-        else:
+            filtered_messages = [msg for msg in messages if msg["role"] != "system"]
+            
+            # Log how many messages we got for debugging
+            print(f"Retrieved {len(filtered_messages)} messages for chat ID {chat_id}")
+            
+            return filtered_messages
+        elif response.status_code == 404:
+            # Chat ID not found, but not an error - just a new chat
+            # Don't set error state for 404s
             return []
-    except Exception:
+        elif response.status_code == 403:
+            # Access denied
+            st.session_state.chat_error = "You do not have access to this chat"
+            return []
+        else:
+            # Other errors should be reported
+            st.session_state.chat_error = f"Error retrieving chat history: Status {response.status_code}"
+            return []
+    except requests.exceptions.Timeout:
+        st.session_state.chat_error = "Request timed out while retrieving chat history"
+        return []
+    except requests.exceptions.ConnectionError:
+        st.session_state.chat_error = "Connection error. Is the API server running?"
+        return []
+    except Exception as e:
+        st.session_state.chat_error = f"Unexpected error: {str(e)}"
         return []
 
 def delete_chat(chat_id):
     """Delete a chat from API"""
     try:
-        response = requests.delete(f"{get_api_url()}/chat/delete/{chat_id}")
+        response = requests.delete(f"{get_api_url()}/chat/delete/{chat_id}", headers=get_headers())
         return response.status_code == 200
     except Exception:
         return False
@@ -58,7 +157,7 @@ def delete_chat(chat_id):
 def get_all_chats():
     """Get all chats from API"""
     try:
-        response = requests.get(f"{get_api_url()}/chat/history")
+        response = requests.get(f"{get_api_url()}/chat/history", headers=get_headers())
         if response.status_code == 200:
             return response.json().get("chats", {})
         else:
@@ -92,10 +191,51 @@ def render_chat_tab():
         st.session_state.current_chat_messages = []
     if "custom_chat_id_submitted" not in st.session_state:
         st.session_state.custom_chat_id_submitted = False
+    if "last_user_input" not in st.session_state:
+        st.session_state.last_user_input = ""
+    if "chat_error" not in st.session_state:
+        st.session_state.chat_error = None
+    if "debug_mode" not in st.session_state:
+        st.session_state.debug_mode = False
+    if "load_chat_requested" not in st.session_state:
+        st.session_state.load_chat_requested = False
+        
+    # Print debug info to help troubleshoot
+    print(f"Chat session state: ID={st.session_state.current_chat_id}, Messages={len(st.session_state.current_chat_messages)}")
+    
+    # Add a debug toggler (hidden in UI but accessible by query param ?debug=true)
+    if "debug" in st.query_params and st.query_params["debug"].lower() == "true":
+        st.session_state.debug_mode = True
+        
+    # Show debug info if enabled
+    if st.session_state.debug_mode:
+        debug_expander = st.expander("Debug Info", expanded=False)
+        with debug_expander:
+            st.write("Session State:")
+            st.json({
+                "current_chat_id": st.session_state.current_chat_id,
+                "message_count": len(st.session_state.current_chat_messages),
+                "custom_chat_id_submitted": st.session_state.custom_chat_id_submitted,
+                "load_chat_requested": st.session_state.load_chat_requested,
+                "chat_error": st.session_state.chat_error,
+            })
+    
+    # Display any error from previous run in a more visible way
+    if st.session_state.chat_error:
+        error_container = st.container()
+        with error_container:
+            st.error(st.session_state.chat_error)
+            if st.button("Clear Error"):
+                st.session_state.chat_error = None
+                st.rerun()
     
     # Show current session ID
     if st.session_state.current_chat_id:
         st.markdown(f"<div style='font-size:0.75rem !important; color:#a0a4b8; margin-bottom:0.5rem;'>Session: {st.session_state.current_chat_id}</div>", unsafe_allow_html=True)
+        
+        # Status indicator for better UX
+        if st.session_state.current_chat_messages:
+            st.markdown(f"<div style='font-size:0.7rem !important; color:#56d364; margin-bottom:0.75rem;'>✓ Chat session loaded ({len(st.session_state.current_chat_messages)} messages)</div>", unsafe_allow_html=True)
     else:
         # Custom session ID input
         if not st.session_state.custom_chat_id_submitted:
@@ -107,10 +247,29 @@ def render_chat_tab():
             )
             if st.button("Set Session ID", key="set_session_id"):
                 set_chat_id(custom_chat_id)
+                st.rerun()  # Rerun to load the chat history
     
-    # Load chat history if we have a chat ID but no messages loaded
-    if st.session_state.current_chat_id and not st.session_state.current_chat_messages:
-        st.session_state.current_chat_messages = get_chat_history(st.session_state.current_chat_id)
+    # Check if we need to load or reload the chat history
+    if st.session_state.current_chat_id and (not st.session_state.current_chat_messages or st.session_state.load_chat_requested):
+        try:
+            # Reset the load request flag
+            st.session_state.load_chat_requested = False
+            
+            # Show loading indicator
+            with st.spinner("Loading chat history..."):
+                messages = get_chat_history(st.session_state.current_chat_id)
+                
+                if messages:
+                    # Update the session state with loaded messages
+                    st.session_state.current_chat_messages = messages
+                    
+                    # Force a rerun to render the messages
+                    st.rerun()
+                else:
+                    # New conversation with selected ID
+                    st.info(f"Started a new conversation with ID: {st.session_state.current_chat_id}")
+        except Exception as e:
+            st.session_state.chat_error = f"Error loading chat history: {str(e)}"
     
     # Chat container with improved styling
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
@@ -176,27 +335,49 @@ def render_chat_tab():
             reset_chat()
         
         if submit_button and user_input:
-            # Add user message to the UI
-            st.session_state.current_chat_messages.append({
+            # Store the input in session state for use after page rerun
+            st.session_state.last_user_input = user_input
+            current_chat_id = st.session_state.current_chat_id
+            
+            # Add user message to the UI immediately for immediate feedback
+            user_message = {
                 "role": "user",
                 "content": user_input,
                 "timestamp": datetime.now().isoformat()
-            })
+            }
+            st.session_state.current_chat_messages.append(user_message)
             
             # Send message to API
-            with st.spinner(""):
-                result = send_message(user_input, st.session_state.current_chat_id)
-                
-                if result["success"]:
-                    # Update chat ID if new conversation
-                    if not st.session_state.current_chat_id:
-                        st.session_state.current_chat_id = result["chat_id"]
+            with st.spinner("Generating response..."):
+                try:
+                    result = send_message(user_input, current_chat_id)
                     
-                    # Add assistant response
-                    st.session_state.current_chat_messages.append({
-                        "role": "assistant",
-                        "content": result["response"],
-                        "timestamp": datetime.now().isoformat()
-                    })
-                else:
-                    st.error(result.get("error", "Unknown error")) 
+                    if result["success"]:
+                        # Update chat ID if new conversation
+                        if not current_chat_id:
+                            st.session_state.current_chat_id = result["chat_id"]
+                        
+                        # Add assistant response to session state
+                        assistant_message = {
+                            "role": "assistant",
+                            "content": result["response"],
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        st.session_state.current_chat_messages.append(assistant_message)
+                        
+                        # Store the error state in session state to clear it
+                        st.session_state.chat_error = None
+                        
+                        # Force a rerun to update the UI
+                        st.rerun()
+                    else:
+                        # Store error in session state so it persists after rerun
+                        error_msg = result.get("error", "Unknown error occurred")
+                        st.session_state.chat_error = error_msg
+                        
+                        # Force rerun to show updated UI with error
+                        st.rerun()
+                except Exception as e:
+                    # Handle any unexpected exceptions
+                    st.session_state.chat_error = f"Unexpected error: {str(e)}"
+                    st.rerun() 
