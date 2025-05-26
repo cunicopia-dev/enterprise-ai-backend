@@ -11,7 +11,7 @@ from utils.database import Base
 # Type variable for SQLAlchemy model
 ModelType = TypeVar("ModelType", bound=Base)
 
-class BaseRepository:
+class BaseRepository(Generic[ModelType]):
     """Base repository class with common CRUD operations."""
     
     def __init__(self, model: Type[ModelType], db: Session):
