@@ -17,6 +17,8 @@ from utils.repository.message_repository import MessageRepository
 from utils.repository.user_repository import UserRepository
 from utils.system_prompt_db import SystemPromptManagerDB
 from utils.models.db_models import Chat, Message
+from utils.provider.manager import ProviderManager
+from utils.provider.base import Message as ProviderMessage, MessageRole
 
 # For backwards compatibility during migration
 CHAT_HISTORY_DIR = config.CHAT_HISTORY_DIR
@@ -43,14 +45,23 @@ class ChatInterfaceDB:
     Handles chat management, persistence, and routing to the appropriate provider.
     """
     
-    def __init__(self, provider: LLMProvider):
+    def __init__(self, provider: Optional[LLMProvider] = None, provider_manager: Optional[ProviderManager] = None):
         """
-        Initialize with a specific provider implementation
+        Initialize with a provider or provider manager
         
         Args:
-            provider: The language model provider to use
+            provider: The language model provider to use (deprecated, for backward compatibility)
+            provider_manager: The provider manager for multi-provider support
         """
-        self.provider = provider
+        if provider_manager:
+            self.provider_manager = provider_manager
+            self.provider = None  # Will be selected dynamically
+        elif provider:
+            # Backward compatibility
+            self.provider = provider
+            self.provider_manager = None
+        else:
+            raise ValueError("Either provider or provider_manager must be provided")
     
     @staticmethod
     def is_valid_chat_id(chat_id: str) -> bool:
@@ -99,7 +110,11 @@ class ChatInterfaceDB:
         user_message: str, 
         user_id: Optional[uuid.UUID], 
         chat_id: Optional[str], 
-        db: Session
+        db: Session,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Chat with the LLM using persistent chat history.
@@ -189,8 +204,56 @@ class ChatInterfaceDB:
                 for msg in db_messages
             ]
             
-            # Use the provider to generate a response
-            response = await self.provider.generate_chat_response(messages)
+            # Get the provider to use
+            if self.provider_manager:
+                # Multi-provider support
+                provider_instance = self.provider_manager.get_provider(provider)
+                
+                # Store provider/model info with the chat if it's new
+                if created_new_chat and provider:
+                    # Get provider and model IDs from database
+                    from utils.repository.provider_repository import ProviderRepository, ProviderModelRepository
+                    provider_repo = ProviderRepository(db)
+                    model_repo = ProviderModelRepository(db)
+                    
+                    db_provider = provider_repo.get_by_name(provider)
+                    if db_provider and model:
+                        db_model = model_repo.get_by_name(db_provider.id, model)
+                        if db_model:
+                            chat_repo.update(
+                                chat_uuid,
+                                provider_id=db_provider.id,
+                                model_id=db_model.id,
+                                temperature=temperature,
+                                max_tokens=max_tokens
+                            )
+                
+                # Convert messages to provider format
+                provider_messages = [
+                    ProviderMessage(
+                        role=MessageRole(msg["role"]),
+                        content=msg["content"]
+                    )
+                    for msg in messages
+                ]
+                
+                # Use the new provider interface
+                chat_response = await provider_instance.chat_completion(
+                    messages=provider_messages,
+                    model=model or "llama3.1:8b-instruct-q8_0",  # Default model
+                    temperature=temperature or 0.7,
+                    max_tokens=max_tokens
+                )
+                
+                response = {
+                    "message": {
+                        "content": chat_response.content,
+                        "role": chat_response.role
+                    }
+                }
+            else:
+                # Backward compatibility with old interface
+                response = await self.provider.generate_chat_response(messages)
             
             # Extract the response content based on provider's response format
             if "message" in response and "content" in response["message"]:
@@ -379,6 +442,12 @@ class ChatInterfaceDB:
         # Optional chat_id for continuing a conversation
         chat_id = request.get("chat_id")
         
+        # Multi-provider support
+        provider = request.get("provider")
+        model = request.get("model")
+        temperature = request.get("temperature")
+        max_tokens = request.get("max_tokens")
+        
         # If chat_id is provided, validate it
         if chat_id and not self.is_valid_chat_id(chat_id):
             raise HTTPException(
@@ -386,7 +455,16 @@ class ChatInterfaceDB:
                 detail="Invalid chat ID. Use only alphanumeric characters, dashes, and underscores."
             )
         
-        response = await self.chat_with_llm(user_message, user_id, chat_id, db)
+        response = await self.chat_with_llm(
+            user_message, 
+            user_id, 
+            chat_id, 
+            db,
+            provider=provider,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
         
         if not response.get("success", False) and "error" in response:
             raise HTTPException(status_code=400, detail=response["error"])
