@@ -108,8 +108,8 @@ class TestMainApp:
         
         app = create_app()
         
-        # Verify provider was created with correct model
-        mock_all_dependencies['provider'].assert_called_once_with(model_name="llama3.1:8b-instruct-q8_0")
+        # Verify provider was created (no arguments now)
+        mock_all_dependencies['provider'].assert_called_once_with()
     
     def test_startup_event_registered(self, mock_config, mock_all_dependencies):
         """Test that lifespan is configured."""
