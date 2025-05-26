@@ -35,7 +35,10 @@ A modern FastAPI application with PostgreSQL database integration, multiple LLM 
 │   └── utils/           # Utility modules
 │       ├── provider/    # LLM provider implementations
 │       │   ├── __init__.py
-│       │   └── ollama.py # Ollama provider implementation
+│       │   ├── base.py   # Base provider interface
+│       │   ├── manager.py # Provider manager
+│       │   ├── ollama.py # Ollama provider implementation
+│       │   └── anthropic.py # Anthropic provider implementation
 │       ├── models/       # Data models
 │       │   ├── api_models.py # Pydantic models for API
 │       │   └── db_models.py  # SQLAlchemy database models
@@ -43,16 +46,19 @@ A modern FastAPI application with PostgreSQL database integration, multiple LLM 
 │       │   ├── base.py  # Base repository
 │       │   ├── chat_repository.py
 │       │   ├── message_repository.py
+│       │   ├── provider_repository.py
 │       │   ├── system_prompt_repository.py
 │       │   ├── user_repository.py
 │       │   └── rate_limit_repository.py
 │       ├── __init__.py
 │       ├── auth.py      # Authentication logic
+│       ├── chat_interface.py # Legacy file-based chat interface
 │       ├── chat_interface_db.py # Database-backed chat interface
 │       ├── config.py    # Configuration management
 │       ├── database.py  # Database connection and session
 │       ├── health.py    # Health check functionality
 │       ├── migration.py # Database migration utilities
+│       ├── system_prompt.py # Legacy file-based system prompt management
 │       └── system_prompt_db.py # Database-backed system prompt management
 ├── tests/               # Test suite
 │   ├── __init__.py
@@ -66,10 +72,13 @@ A modern FastAPI application with PostgreSQL database integration, multiple LLM 
 │   ├── testing-quickstart.md # Quick start guide for testing
 │   └── multi-provider-integration-plan.md # Plan for multiple LLM providers
 ├── sql/                 # Database SQL scripts
-│   ├── 01_schema.sql    # Database schema definition
+│   ├── 01_schema.sql    # Core database schema definition
 │   ├── 02_seed_data.sql # Initial seed data
+│   ├── 03_multi_provider_schema.sql # Multi-provider tables
+│   ├── 04_seed_providers.sql # Provider seed data
 │   ├── setup.sql        # Master setup script
-│   └── docker-init.sh   # Docker initialization script
+│   ├── docker-init.sh   # Docker initialization script
+│   └── README.md        # SQL documentation
 ├── streamlit/           # Streamlit frontend application
 │   ├── app.py           # Main Streamlit application
 │   ├── modules/         # Modular components
@@ -98,7 +107,7 @@ A modern FastAPI application with PostgreSQL database integration, multiple LLM 
 - 🔐 **Database-Backed Authentication**: Secure endpoints with user management and API keys
 - 🛡️ **Rate Limiting**: Database-tracked rate limiting per user
 - ✅ **Input Validation**: Comprehensive validation of all user inputs
-- 🤖 **Multi-Provider LLM Support**: Seamlessly switch between Ollama, Anthropic, OpenAI, and Google
+- 🤖 **Multi-Provider LLM Support**: Seamlessly switch between Ollama and Anthropic (OpenAI and Google planned)
 - 🔌 **Provider Management**: Dynamic provider selection with database configuration
 - 📊 **Usage Tracking**: Monitor token usage and costs per provider/model
 - 💾 **Scalable Data Storage**: PostgreSQL database with proper indexing
@@ -263,7 +272,7 @@ graph TB
 3. **Provider Management Layer**: Multi-provider LLM support
    - **Provider Manager**: Central orchestrator for all LLM providers
    - **Base Provider Interface**: Standardized API for all providers
-   - **Provider Implementations**: Ollama, Anthropic, OpenAI, Google
+   - **Provider Implementations**: Ollama, Anthropic (OpenAI and Google planned)
    - **Dynamic Configuration**: Database-backed provider settings
    - **Usage Tracking**: Monitor tokens and costs per provider/model
    
@@ -616,7 +625,7 @@ curl -X POST http://localhost:8000/chat \
   -d '{
     "message": "Write a haiku about technology",
     "provider": "anthropic",
-    "model": "claude-4-opus-20250114"
+    "model": "claude-3-5-haiku-20241022"
   }'
 ```
 
