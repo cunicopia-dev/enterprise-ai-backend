@@ -1,16 +1,19 @@
 -- Seed data for multi-provider support
 -- This adds initial provider configurations and models
 
+-- Set schema to public
+SET search_path TO public;
+
 -- Insert provider configurations
-INSERT INTO provider_configs (name, display_name, provider_type, base_url, api_key_env_var, is_active, is_default, config) VALUES
+INSERT INTO provider_configs (id, name, display_name, provider_type, base_url, api_key_env_var, is_active, is_default, config) VALUES
 -- Ollama (default for backward compatibility)
-('ollama', 'Ollama (Local)', 'ollama', 'http://localhost:11434', NULL, TRUE, TRUE, '{"timeout": 30}'),
+(gen_random_uuid(), 'ollama', 'Ollama (Local)', 'ollama', 'http://localhost:11434', NULL, TRUE, TRUE, '{"timeout": 30}'),
 -- Anthropic
-('anthropic', 'Anthropic Claude', 'anthropic', 'https://api.anthropic.com', 'ANTHROPIC_API_KEY', TRUE, FALSE, '{"api_version": "2023-06-01", "timeout": 60}'),
+(gen_random_uuid(), 'anthropic', 'Anthropic Claude', 'anthropic', 'https://api.anthropic.com', 'ANTHROPIC_API_KEY', TRUE, FALSE, '{"api_version": "2023-06-01", "timeout": 60}'),
 -- OpenAI
-('openai', 'OpenAI GPT', 'openai', 'https://api.openai.com/v1', 'OPENAI_API_KEY', TRUE, FALSE, '{"timeout": 60}'),
+(gen_random_uuid(), 'openai', 'OpenAI GPT', 'openai', 'https://api.openai.com/v1', 'OPENAI_API_KEY', TRUE, FALSE, '{"timeout": 60}'),
 -- Google
-('google', 'Google Gemini', 'google', 'https://generativelanguage.googleapis.com', 'GOOGLE_API_KEY', TRUE, FALSE, '{"timeout": 60}')
+(gen_random_uuid(), 'google', 'Google Gemini', 'google', 'https://generativelanguage.googleapis.com', 'GOOGLE_API_KEY', TRUE, FALSE, '{"timeout": 60}')
 ON CONFLICT (name) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     base_url = EXCLUDED.base_url,
@@ -158,4 +161,4 @@ SET capabilities =
         ELSE 
             '{"code": true, "chat": true, "reasoning": true}'::jsonb
     END
-WHERE capabilities = '{}'::jsonb;
+WHERE capabilities IS NULL OR capabilities = '{}'::jsonb;
