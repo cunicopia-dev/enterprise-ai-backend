@@ -26,6 +26,28 @@ class Config:
     DB_USER: str = os.getenv("DB_USER", "streamlitdemo")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "streamlitdemo")
     
+    # Provider configuration
+    DEFAULT_PROVIDER: str = os.getenv("DEFAULT_PROVIDER", "ollama")
+    
+    # Provider API Keys
+    ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY", None)
+    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", None)
+    GOOGLE_API_KEY: Optional[str] = os.getenv("GOOGLE_API_KEY", None)
+    
+    # Provider-specific settings
+    OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_TIMEOUT: int = int(os.getenv("OLLAMA_TIMEOUT", "30"))
+    
+    ANTHROPIC_TIMEOUT: int = int(os.getenv("ANTHROPIC_TIMEOUT", "60"))
+    ANTHROPIC_MAX_RETRIES: int = int(os.getenv("ANTHROPIC_MAX_RETRIES", "3"))
+    
+    OPENAI_TIMEOUT: int = int(os.getenv("OPENAI_TIMEOUT", "60"))
+    OPENAI_MAX_RETRIES: int = int(os.getenv("OPENAI_MAX_RETRIES", "3"))
+    OPENAI_BASE_URL: Optional[str] = os.getenv("OPENAI_BASE_URL", None)  # For Azure OpenAI or custom endpoints
+    
+    GOOGLE_TIMEOUT: int = int(os.getenv("GOOGLE_TIMEOUT", "60"))
+    GOOGLE_MAX_RETRIES: int = int(os.getenv("GOOGLE_MAX_RETRIES", "3"))
+    
     # Constructed database URL for SQLAlchemy
     @property
     def DATABASE_URL(self) -> str:
