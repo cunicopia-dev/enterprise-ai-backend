@@ -7,11 +7,18 @@ import re
 import uuid
 from datetime import datetime
 
+# Import ModelInfo from provider base to ensure consistency
+from utils.provider.base import ModelInfo
+
 # Chat models
 class ChatRequest(BaseModel):
     """Model for chat request validation"""
     message: str
     chat_id: Optional[str] = None
+    provider: Optional[str] = None  # Provider name (e.g., "ollama", "anthropic", "openai")
+    model: Optional[str] = None  # Model name (e.g., "llama3.1:8b-instruct-q8_0")
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(None, gt=0)
     
     @field_validator('message')
     @classmethod
@@ -30,6 +37,16 @@ class ChatRequest(BaseModel):
             # Strict alphanumeric + limited special chars, max 50 chars
             if not re.match(r'^[a-zA-Z0-9_-]{1,50}$', v):
                 raise ValueError('Invalid chat ID: must be alphanumeric with dashes/underscores, max 50 chars')
+        return v
+    
+    @field_validator('provider')
+    @classmethod
+    def validate_provider(cls, v):
+        if v is not None:
+            # Only allow known provider names
+            allowed_providers = ['ollama', 'anthropic', 'openai', 'google']
+            if v not in allowed_providers:
+                raise ValueError(f'Invalid provider: must be one of {allowed_providers}')
         return v
 
 class ChatResponse(BaseModel):
@@ -183,3 +200,34 @@ class UserUpdate(BaseModel):
         if not any(v is not None for v in [self.username, self.email, self.password, self.is_admin, self.is_active]):
             raise ValueError('At least one field must be provided for update')
         return self
+
+# Provider models
+class ProviderInfo(BaseModel):
+    """Model for provider information"""
+    name: str
+    display_name: str
+    is_active: bool
+    is_default: bool
+    models: List[str] = []  # List of available model names
+
+class ProviderListResponse(BaseModel):
+    """Model for provider list response"""
+    success: bool
+    providers: List[ProviderInfo]
+    error: Optional[str] = None
+
+# ModelInfo is imported from utils.provider.base above
+
+class ModelListResponse(BaseModel):
+    """Model for model list response"""
+    success: bool
+    provider: str
+    models: List[ModelInfo]
+    error: Optional[str] = None
+
+class ProviderHealthResponse(BaseModel):
+    """Model for provider health check response"""
+    success: bool
+    provider: str
+    status: str  # "healthy" or "unhealthy"
+    error: Optional[str] = None
