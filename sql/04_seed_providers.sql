@@ -114,9 +114,11 @@ SELECT
     model.supports_functions
 FROM provider_configs pc
 CROSS JOIN (VALUES 
-    ('gemini-2.5-pro', 'Gemini 2.5 Pro', 'Advanced model with built-in thinking', 1000000, 8192, TRUE, TRUE),
-    ('gemini-2.5-flash', 'Gemini 2.5 Flash', 'Low latency, 20-30% more efficient', 1000000, 8192, TRUE, TRUE),
-    ('gemini-2.0-flash-exp', 'Gemini 2.0 Flash Experimental', 'Experimental features and capabilities', 1000000, 8192, TRUE, TRUE),
+    ('gemini-2.5-pro', 'Gemini 2.5 Pro', 'Most advanced thinking model, tops LMArena leaderboard', 1000000, 32768, TRUE, TRUE),
+    ('gemini-2.5-pro-deep-think', 'Gemini 2.5 Pro Deep Think', 'Enhanced reasoning for complex math and coding problems', 1000000, 32768, TRUE, TRUE),
+    ('gemini-2.5-flash', 'Gemini 2.5 Flash', 'Fast and efficient workhorse model', 1000000, 8192, TRUE, TRUE),
+    ('gemini-2.5-flash-lite', 'Gemini 2.5 Flash Lite', 'Lowest latency and cost in 2.5 family', 1000000, 8192, TRUE, TRUE),
+    ('gemini-2.0-flash-exp', 'Gemini 2.0 Flash Experimental', 'Experimental multimodal capabilities', 1000000, 8192, TRUE, TRUE),
     ('gemini-1.5-pro', 'Gemini 1.5 Pro', 'Previous generation Pro model', 2097152, 8192, TRUE, TRUE),
     ('gemini-1.5-flash', 'Gemini 1.5 Flash', 'Previous generation Flash model', 1048576, 8192, TRUE, TRUE)
 ) AS model(model_name, display_name, description, context_window, max_tokens, supports_streaming, supports_functions)
@@ -154,8 +156,12 @@ SET capabilities =
         WHEN pm.model_name LIKE 'gpt-3.5%' THEN 
             '{"code": true, "chat": true, "reasoning": true}'::jsonb
         -- Google models
+        WHEN pm.model_name = 'gemini-2.5-pro-deep-think' THEN 
+            '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "deep_thinking": true, "enhanced_reasoning": true, "math_expert": true, "thinking_budgets": true}'::jsonb
         WHEN pm.model_name LIKE 'gemini-2.5%' THEN 
-            '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "built_in_thinking": true, "live_api": true}'::jsonb
+            '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "built_in_thinking": true, "live_api": true, "native_audio": true, "thinking_budgets": true}'::jsonb
+        WHEN pm.model_name LIKE 'gemini-2.0%' THEN 
+            '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "multimodal": true, "experimental": true}'::jsonb
         WHEN pm.model_name LIKE 'gemini%' THEN 
             '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "large_context": true}'::jsonb
         ELSE 

@@ -8,7 +8,7 @@ from datetime import datetime
 import asyncio
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class MessageRole(str, Enum):
@@ -81,8 +81,8 @@ class ProviderConfig(BaseModel):
     is_default: bool = Field(False, description="Whether provider is default")
     config: Dict[str, Any] = Field(default_factory=dict, description="Additional configuration")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "ollama",
                 "display_name": "Ollama (Local)",
@@ -93,6 +93,7 @@ class ProviderConfig(BaseModel):
                 "config": {"timeout": 30}
             }
         }
+    )
 
 
 class ModelInfo(BaseModel):
@@ -117,8 +118,8 @@ class ChatResponse(BaseModel):
     usage: Optional[Dict[str, int]] = Field(None, description="Token usage")
     created_at: datetime = Field(default_factory=datetime.now, description="Creation timestamp")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "chatcmpl-123",
                 "model": "llama3.1:8b-instruct-q8_0",
@@ -132,6 +133,7 @@ class ChatResponse(BaseModel):
                 }
             }
         }
+    )
 
 
 class StreamChunk(BaseModel):

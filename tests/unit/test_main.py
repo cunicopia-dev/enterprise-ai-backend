@@ -23,7 +23,7 @@ def mock_all_dependencies():
         with patch('main.engine') as mock_engine:
             with patch('main.get_db') as mock_get_db:
                 with patch('main.run_migration') as mock_migration:
-                    with patch('main.OllamaProvider') as mock_provider:
+                    with patch('main.ProviderManager') as mock_provider_manager:
                         with patch('main.ChatInterfaceDB') as mock_chat:
                             with patch('main.SystemPromptManagerDB') as mock_prompt:
                                 with patch('main._rate_limit_exceeded_handler') as mock_rate_handler:
@@ -53,7 +53,7 @@ def mock_all_dependencies():
                                         'engine': mock_engine,
                                         'get_db': mock_get_db,
                                         'migration': mock_migration,
-                                        'provider': mock_provider,
+                                        'provider_manager': mock_provider_manager,
                                         'chat': chat_instance,
                                         'prompt': mock_prompt
                                     }
@@ -108,8 +108,8 @@ class TestMainApp:
         
         app = create_app()
         
-        # Verify provider was created (no arguments now)
-        mock_all_dependencies['provider'].assert_called_once_with()
+        # Verify provider manager was created (no arguments now)
+        mock_all_dependencies['provider_manager'].assert_called_once_with()
     
     def test_startup_event_registered(self, mock_config, mock_all_dependencies):
         """Test that lifespan is configured."""
