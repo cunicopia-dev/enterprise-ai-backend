@@ -7,7 +7,7 @@ temp/
 
 system_prompts/ 
 system_prompt.txt
-
+.claude/
 
 # C extensions
 *.so
