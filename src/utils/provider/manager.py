@@ -20,6 +20,12 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
     OpenAIProvider = None
+try:
+    from .google import GoogleProvider
+    GOOGLE_AVAILABLE = True
+except ImportError:
+    GOOGLE_AVAILABLE = False
+    GoogleProvider = None
 from utils.database import SessionLocal
 from utils.repository.provider_repository import ProviderRepository
 from utils.models.db_models import ProviderConfig as DBProviderConfig
@@ -50,8 +56,9 @@ class ProviderManager:
         if OPENAI_AVAILABLE and OpenAIProvider:
             self._provider_classes["openai"] = OpenAIProvider
         
-        # Future providers will be added here:
-        # "google": GeminiProvider,
+        # Add Google if available
+        if GOOGLE_AVAILABLE and GoogleProvider:
+            self._provider_classes["google"] = GoogleProvider
         self._db = db
         self._default_provider: Optional[str] = None
         self._initialized = False
