@@ -77,8 +77,7 @@ class TestOpenAIProvider:
         )
     
     @patch("utils.provider.openai.OPENAI_AVAILABLE", True)
-    @patch("utils.provider.openai.SessionLocal")
-    async def test_list_models(self, mock_session, provider_config, mock_env):
+    async def test_list_models(self, provider_config, mock_env):
         """Test listing models from database."""
         # Mock database models
         mock_model = Mock()
@@ -98,9 +97,15 @@ class TestOpenAIProvider:
         mock_repo = Mock()
         mock_repo.get_by_name.return_value = mock_provider_config
         
-        with patch("utils.provider.openai.ProviderRepository", return_value=mock_repo):
-            provider = OpenAIProvider(provider_config)
-            models = await provider.list_models()
+        with patch("utils.database.SessionLocal") as mock_session_class:
+            # Mock SessionLocal instance
+            mock_db = Mock()
+            mock_session_class.return_value = mock_db
+            mock_db.close = Mock()
+            
+            with patch("utils.repository.provider_repository.ProviderRepository", return_value=mock_repo):
+                provider = OpenAIProvider(provider_config)
+                models = await provider.list_models()
         
         assert len(models) == 1
         assert models[0].model_name == "gpt-4o"
@@ -172,7 +177,8 @@ class TestOpenAIProvider:
         mock_client = AsyncMock()
         mock_client_class.return_value = mock_client
         
-        error = APIStatusError("Model not found", status_code=404)
+        error = APIStatusError("Model not found", response=Mock(), body=Mock())
+        error.status_code = 404
         mock_client.chat.completions.create = AsyncMock(side_effect=error)
         
         provider = OpenAIProvider(provider_config)
