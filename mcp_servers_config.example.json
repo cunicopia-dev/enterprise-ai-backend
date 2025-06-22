@@ -1,0 +1,70 @@
+{
+  "mcp_servers": {
+    "github": {
+      "name": "github",
+      "display_name": "GitHub Integration",
+      "description": "Access GitHub repositories, issues, and pull requests",
+      "transport_type": "stdio",
+      "config": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "GITHUB_PERSONAL_ACCESS_TOKEN",
+          "ghcr.io/github/github-mcp-server"
+        ],
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "yourPAT"
+        }
+      },
+      "is_active": true
+    },
+    "notion": {
+      "name": "notion",
+      "display_name": "Notion API",
+      "description": "Access Notion databases and pages",
+      "transport_type": "stdio",
+      "config": {
+        "command": "npx",
+        "args": ["-y", "@notionhq/notion-mcp-server"],
+        "env": {
+          "NOTION_API_KEY": "yourAPIKey"
+        }
+      },
+      "is_active": true
+    },
+    "filesystem": {
+      "name": "filesystem",
+      "display_name": "Filesystem Access",
+      "description": "Read and write files in specified directories",
+      "transport_type": "stdio",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/path/to/your/stuff"
+        ]
+      },
+      "is_active": true
+    },
+    "memory": {
+      "name": "memory",
+      "display_name": "Local Memory PostgreSQL",
+      "description": "Persistent memory storage using PostgreSQL",
+      "transport_type": "stdio",
+      "config": {
+        "command": "docker",
+        "args": [
+          "run", "--rm", "-i",
+          "-v", "/Users/YOURUSERNAME/llm_memory/postgres_data:/var/lib/postgresql/data",
+          "--network", "host",
+          "@cunicopia/local-memory-mcp:postgres"
+        ]
+      },
+      "is_active": false
+    }
+  }
+}
