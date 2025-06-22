@@ -160,7 +160,11 @@ class BaseProvider:
 ```
 
 #### 2.3 Hybrid Provider Enhancement
-Update existing providers (OpenAI, Anthropic, Google) to support MCP tool integration:
+Update existing providers (OpenAI, Anthropic, Google) to support MCP tool integration - 
+ASSUME ALL PROVIDERS SUPPORT MCP!!!!
+ASSUME ALL PROVIDERS SUPPORT MCP!!!!
+ASSUME ALL PROVIDERS SUPPORT MCP!!!!
+
 ```python
 class OpenAIProvider(BaseProvider):
     async def chat_completion(self, messages, model, mcp_tools=None, **kwargs):
@@ -248,53 +252,6 @@ class MCPChatRequest(BaseModel):
 ### Phase 4: Pre-built MCP Server Integrations (Week 7-8)
 **Goal**: Implement common MCP server integrations
 
-#### 4.1 File System MCP Server
-```python
-# Built-in MCP server for file system access
-class FileSystemMCPServer:
-    """MCP server for secure file system operations."""
-    
-    @tool
-    async def read_file(self, file_path: str) -> str:
-        """Read file content with security checks."""
-    
-    @tool
-    async def list_directory(self, directory_path: str) -> List[str]:
-        """List directory contents with access control."""
-    
-    @tool
-    async def search_files(self, pattern: str, directory: str) -> List[str]:
-        """Search for files matching pattern."""
-```
-
-#### 4.2 Database MCP Server
-```python
-class DatabaseMCPServer:
-    """MCP server for database operations."""
-    
-    @tool
-    async def execute_query(self, query: str, params: Optional[List] = None) -> List[Dict]:
-        """Execute read-only database query."""
-    
-    @resource
-    async def get_schema(self) -> Dict[str, Any]:
-        """Get database schema information."""
-```
-
-#### 4.3 Web Search MCP Server
-```python
-class WebSearchMCPServer:
-    """MCP server for web search capabilities."""
-    
-    @tool
-    async def search_web(self, query: str, num_results: int = 10) -> List[Dict]:
-        """Perform web search and return results."""
-    
-    @tool
-    async def fetch_webpage(self, url: str) -> str:
-        """Fetch and return webpage content."""
-```
-
 #### 4.4 External MCP Server Connectors
 ```yaml
 # Configuration for external MCP servers
@@ -316,6 +273,53 @@ mcp_servers:
       args: ["-m", "slack_mcp_server"]
       env:
         SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
+```
+
+### 4.5 External MCP Servers to Test with
+The developer has these setup with Claude Desktop already and have proven these already work 
+```json
+{
+    "mcpServers": {
+      "github": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "GITHUB_PERSONAL_ACCESS_TOKEN",
+          "ghcr.io/github/github-mcp-server"
+        ],
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "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"
+        }
+      },
+      "notionApi": {
+        "command": "npx",
+        "args": ["-y", "@notionhq/notion-mcp-server"],
+        "env": {
+          "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer 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\", \"Notion-Version\": \"2022-06-28\" }"
+        }
+      },
+      "filesystem": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/Users/keithcunic/code/make-it-real-website"
+        ]
+      },
+  "localMemoryMCP-PostgreSQL": {
+    "command": "docker",
+    "args": [
+      "run", "--rm", "-i",
+      "-v", "/Users/keithcunic/llm_memory/postgres_data:/var/lib/postgresql/data",
+      "--network", "host",
+      "cunicopia/local-memory-mcp:postgres"
+    ]
+  }
+    }
+  }
 ```
 
 ### Phase 5: Advanced Features (Week 9-10)
@@ -345,17 +349,6 @@ class MCPToolSelector:
         """Rank tools by relevance to current context."""
 ```
 
-#### 5.3 Caching and Performance
-```python
-class MCPCache:
-    """Caching layer for MCP tool results."""
-    
-    async def cache_tool_result(self, tool_name: str, arguments: Dict, result: Any, ttl: int = 3600):
-        """Cache tool execution results."""
-        
-    async def get_cached_result(self, tool_name: str, arguments: Dict) -> Optional[Any]:
-        """Retrieve cached tool result."""
-```
 
 ### Phase 6: Testing and Documentation (Week 11-12)
 **Goal**: Comprehensive testing and documentation
