@@ -8,7 +8,7 @@ temp/
 system_prompts/ 
 system_prompt.txt
 .claude/
-mcp_server_config.json
+mcp_servers_config.json
 
 
 # C extensions
