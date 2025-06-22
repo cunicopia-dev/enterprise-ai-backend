@@ -105,6 +105,110 @@ class ChatInterfaceDB:
         
         return default_user.id
     
+    def _enhance_system_prompt_with_mcp(self, base_prompt: str) -> str:
+        """
+        Enhance the base system prompt with MCP tool information.
+        
+        This method programmatically adds tool descriptions to ensure the LLM
+        knows about available MCP tools regardless of the user's system prompt.
+        
+        Args:
+            base_prompt: The user's base system prompt
+            
+        Returns:
+            Enhanced system prompt with MCP tool information
+        """
+        # Check if we have a provider manager with MCP capabilities
+        if not self.provider_manager:
+            return base_prompt
+        
+        try:
+            # Try to get MCP host from provider manager
+            if hasattr(self.provider_manager, '_mcp_host') and self.provider_manager._mcp_host:
+                mcp_host = self.provider_manager._mcp_host
+                
+                # Get available tools if MCP host is initialized
+                if mcp_host.is_initialized():
+                    tools = mcp_host.get_all_tools()
+                    connected_servers = mcp_host.get_connected_servers()
+                    
+                    if tools:
+                        # Build MCP tool section
+                        mcp_section = self._build_mcp_tools_section(tools, connected_servers)
+                        
+                        # Combine base prompt with MCP information
+                        enhanced_prompt = f"""{base_prompt}
+
+{mcp_section}"""
+                        return enhanced_prompt
+        except Exception as e:
+            # Log error but don't break chat functionality
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to enhance system prompt with MCP info: {e}")
+        
+        return base_prompt
+    
+    def _build_mcp_tools_section(self, tools: dict, connected_servers: set) -> str:
+        """
+        Build the MCP tools section for the system prompt.
+        
+        Args:
+            tools: Dictionary of available MCP tools
+            connected_servers: Set of connected server names
+            
+        Returns:
+            Formatted MCP tools section
+        """
+        if not tools:
+            return ""
+        
+        # Group tools by server
+        tools_by_server = {}
+        for tool_name, tool in tools.items():
+            if "__" in tool_name:
+                server_name = tool_name.split("__")[0]
+                actual_tool_name = tool_name.split("__", 1)[1]
+            else:
+                server_name = "unknown"
+                actual_tool_name = tool_name
+            
+            if server_name not in tools_by_server:
+                tools_by_server[server_name] = []
+            
+            tools_by_server[server_name].append({
+                "full_name": tool_name,
+                "name": actual_tool_name,
+                "description": tool.description or f"Execute {actual_tool_name}"
+            })
+        
+        # Build the tools section
+        mcp_section = """
+## Available Tools
+
+You have access to the following tools through the Model Context Protocol (MCP). When a user asks you to perform actions that these tools can handle, you should use them proactively:
+"""
+        
+        for server_name, server_tools in tools_by_server.items():
+            server_status = "🟢 Connected" if server_name in connected_servers else "🔴 Disconnected"
+            mcp_section += f"""
+### {server_name.title()} Server ({server_status})
+"""
+            
+            for tool_info in server_tools:
+                mcp_section += f"""- **{tool_info['full_name']}**: {tool_info['description']}
+"""
+        
+        mcp_section += """
+**Important**: 
+- Always use these tools when the user's request can benefit from them
+- You don't need permission to use these tools - they are part of your capabilities
+- If a user asks to read files, list directories, or perform filesystem operations, use the appropriate filesystem tools
+- Provide helpful context about what the tools found or accomplished
+"""
+        
+        return mcp_section
+    
     async def chat_with_llm(
         self, 
         user_message: str, 
@@ -132,8 +236,9 @@ class ChatInterfaceDB:
         chat_repo = ChatRepository(db)
         message_repo = MessageRepository(db)
         
-        # Get the system prompt
-        system_prompt = SystemPromptManagerDB.get_system_prompt(db)
+        # Get the base system prompt and enhance it with MCP tool information
+        base_system_prompt = SystemPromptManagerDB.get_system_prompt(db)
+        system_prompt = self._enhance_system_prompt_with_mcp(base_system_prompt)
         
         chat_entity = None
         chat_uuid = None
