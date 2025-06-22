@@ -2,6 +2,7 @@
 Google Gemini provider implementation.
 """
 import os
+import json
 from typing import List, Dict, Any, Optional, AsyncGenerator
 import asyncio
 from datetime import datetime
@@ -155,13 +156,21 @@ class GoogleProvider(BaseProvider):
         contents = []
         
         for msg in messages:
-            if msg.role == MessageRole.SYSTEM:
+            # Handle both string and enum roles
+            role_value = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+            
+            if msg.role == MessageRole.SYSTEM or role_value == "system":
                 # Google uses system_instruction parameter for system messages
                 system_instruction = msg.content
             else:
                 # Convert to Google's format
                 # Google uses "user" and "model" roles (not "assistant")
-                role = "user" if msg.role == MessageRole.USER else "model"
+                if role_value == "user":
+                    role = "user"
+                elif role_value in ("assistant", "model"):
+                    role = "model"
+                else:
+                    role = "user"  # Default fallback
                 
                 content = {
                     "role": role,
@@ -206,6 +215,12 @@ class GoogleProvider(BaseProvider):
             if max_tokens is not None:
                 config_params["max_output_tokens"] = max_tokens
             
+            # Add tools if provided (Google supports function calling)
+            if "tools" in kwargs and kwargs["tools"]:
+                request_params["tools"] = self._convert_tools_to_google_format(kwargs["tools"])
+                if "tool_choice" in kwargs:
+                    config_params["function_calling_config"] = {"mode": kwargs["tool_choice"]}
+            
             # Add any additional parameters
             if "top_p" in kwargs:
                 config_params["top_p"] = kwargs["top_p"]
@@ -223,14 +238,27 @@ class GoogleProvider(BaseProvider):
             # Make the API call
             response = self.client.models.generate_content(**request_params)
             
-            # Extract the content
+            # Extract the content and function calls
             content = ""
+            tool_calls = []
+            
             if response.candidates and len(response.candidates) > 0:
                 candidate = response.candidates[0]
                 if candidate.content and candidate.content.parts:
                     for part in candidate.content.parts:
                         if hasattr(part, 'text') and part.text:
                             content += part.text
+                        elif hasattr(part, 'function_call'):
+                            # Convert Google function call to standard format
+                            function_call = part.function_call
+                            tool_calls.append({
+                                "id": f"google-{datetime.now().isoformat()}",
+                                "type": "function",
+                                "function": {
+                                    "name": function_call.name,
+                                    "arguments": json.dumps(dict(function_call.args)) if function_call.args else "{}"
+                                }
+                            })
             
             # Determine finish reason
             finish_reason = "stop"
@@ -244,7 +272,8 @@ class GoogleProvider(BaseProvider):
                 model=model,
                 content=content,
                 role="assistant",
-                finish_reason=finish_reason
+                finish_reason=finish_reason,
+                tool_calls=tool_calls if tool_calls else None
             )
             
         except Exception as e:
@@ -275,6 +304,23 @@ class GoogleProvider(BaseProvider):
                     f"Google Gemini API error: {str(e)}",
                     provider=self.name
                 )
+
+    def _convert_tools_to_google_format(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Convert OpenAI-style tools to Google Gemini format."""
+        google_tools = [{
+            "function_declarations": []
+        }]
+        
+        for tool in tools:
+            if tool.get("type") == "function":
+                func = tool["function"]
+                google_tools[0]["function_declarations"].append({
+                    "name": func["name"],
+                    "description": func.get("description", f"Execute {func['name']}"),
+                    "parameters": func.get("parameters", {})
+                })
+        
+        return google_tools
     
     async def chat_completion_stream(
         self,
@@ -310,6 +356,12 @@ class GoogleProvider(BaseProvider):
                 config_params["temperature"] = temperature
             if max_tokens is not None:
                 config_params["max_output_tokens"] = max_tokens
+            
+            # Add tools if provided (Google supports function calling)
+            if "tools" in kwargs and kwargs["tools"]:
+                request_params["tools"] = self._convert_tools_to_google_format(kwargs["tools"])
+                if "tool_choice" in kwargs:
+                    config_params["function_calling_config"] = {"mode": kwargs["tool_choice"]}
             
             # Add any additional parameters
             if "top_p" in kwargs:
@@ -381,3 +433,20 @@ class GoogleProvider(BaseProvider):
                     f"Google Gemini API error: {str(e)}",
                     provider=self.name
                 )
+
+    def _convert_tools_to_google_format(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Convert OpenAI-style tools to Google Gemini format."""
+        google_tools = [{
+            "function_declarations": []
+        }]
+        
+        for tool in tools:
+            if tool.get("type") == "function":
+                func = tool["function"]
+                google_tools[0]["function_declarations"].append({
+                    "name": func["name"],
+                    "description": func.get("description", f"Execute {func['name']}"),
+                    "parameters": func.get("parameters", {})
+                })
+        
+        return google_tools

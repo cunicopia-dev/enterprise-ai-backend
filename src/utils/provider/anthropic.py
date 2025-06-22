@@ -2,6 +2,7 @@
 Anthropic Claude provider implementation.
 """
 import os
+import json
 from typing import List, Dict, Any, Optional, AsyncGenerator
 import asyncio
 from datetime import datetime
@@ -134,14 +135,35 @@ class AnthropicProvider(BaseProvider):
         anthropic_messages = []
         
         for msg in messages:
-            if msg.role == MessageRole.SYSTEM:
+            # Handle both string and enum roles
+            role_value = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+            
+            if msg.role == MessageRole.SYSTEM or role_value == "system":
                 # Anthropic uses a separate system parameter, not a message role
                 system_prompt = msg.content
             else:
+                # Check if this is a structured message (JSON string containing content blocks)
+                content = msg.content
+                if isinstance(content, str):
+                    try:
+                        # Try to parse as structured content
+                        parsed_content = json.loads(content)
+                        if isinstance(parsed_content, list) and all(isinstance(item, dict) for item in parsed_content):
+                            # Check if it's tool results or tool use blocks
+                            if all(item.get("type") == "tool_result" for item in parsed_content):
+                                # Tool result blocks (user message)
+                                content = parsed_content
+                            elif any(item.get("type") in ["text", "tool_use"] for item in parsed_content):
+                                # Mixed content blocks (assistant message)
+                                content = parsed_content
+                    except (json.JSONDecodeError, TypeError):
+                        # Not JSON or not structured content, use as-is
+                        pass
+                
                 # Convert to Anthropic format
                 anthropic_messages.append({
-                    "role": msg.role.value,
-                    "content": msg.content
+                    "role": role_value,
+                    "content": content
                 })
         
         return system_prompt, anthropic_messages
@@ -184,6 +206,10 @@ class AnthropicProvider(BaseProvider):
             if system_prompt:
                 request_params["system"] = system_prompt
             
+            # Add tools if provided (Claude supports function calling)
+            if "tools" in kwargs and kwargs["tools"]:
+                request_params["tools"] = self._convert_tools_to_anthropic_format(kwargs["tools"])
+            
             # Add any additional parameters
             if "stop_sequences" in kwargs:
                 request_params["stop_sequences"] = kwargs["stop_sequences"]
@@ -195,8 +221,10 @@ class AnthropicProvider(BaseProvider):
             # Make the API call
             response = await self.client.messages.create(**request_params)
             
-            # Extract the content
+            # Extract the content and tool calls
             content = ""
+            tool_calls = []
+            
             if response.content:
                 # Handle multiple content blocks
                 for block in response.content:
@@ -204,13 +232,34 @@ class AnthropicProvider(BaseProvider):
                         content += block.text
                     elif isinstance(block, dict) and 'text' in block:
                         content += block['text']
+                    elif hasattr(block, 'type') and block.type == 'tool_use':
+                        # Convert Claude tool_use to standard format
+                        tool_calls.append({
+                            "id": block.id,
+                            "type": "function",
+                            "function": {
+                                "name": block.name,
+                                "arguments": json.dumps(block.input) if hasattr(block, 'input') else "{}"
+                            }
+                        })
+                    elif isinstance(block, dict) and block.get('type') == 'tool_use':
+                        # Handle dict format
+                        tool_calls.append({
+                            "id": block.get('id', 'unknown'),
+                            "type": "function",
+                            "function": {
+                                "name": block.get('name', 'unknown'),
+                                "arguments": json.dumps(block.get('input', {})) if block.get('input') else "{}"
+                            }
+                        })
             
             return ChatResponse(
                 id=response.id,
                 model=response.model,
                 content=content,
                 role="assistant",
-                finish_reason=response.stop_reason
+                finish_reason=response.stop_reason,
+                tool_calls=tool_calls if tool_calls else None
             )
             
         except APITimeoutError:
@@ -246,6 +295,19 @@ class AnthropicProvider(BaseProvider):
         except Exception as e:
             await self._handle_error(e, self.name)
             raise
+
+    def _convert_tools_to_anthropic_format(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Convert OpenAI-style tools to Anthropic format."""
+        anthropic_tools = []
+        for tool in tools:
+            if tool.get("type") == "function":
+                func = tool["function"]
+                anthropic_tools.append({
+                    "name": func["name"],
+                    "description": func.get("description", f"Execute {func['name']}"),
+                    "input_schema": func.get("parameters", {})
+                })
+        return anthropic_tools
     
     async def chat_completion_stream(
         self,
@@ -283,6 +345,10 @@ class AnthropicProvider(BaseProvider):
             # Add system prompt if present
             if system_prompt:
                 request_params["system"] = system_prompt
+            
+            # Add tools if provided (Claude supports function calling)
+            if "tools" in kwargs and kwargs["tools"]:
+                request_params["tools"] = self._convert_tools_to_anthropic_format(kwargs["tools"])
             
             # Add any additional parameters
             if "stop_sequences" in kwargs:
@@ -343,3 +409,16 @@ class AnthropicProvider(BaseProvider):
         except Exception as e:
             await self._handle_error(e, self.name)
             raise
+
+    def _convert_tools_to_anthropic_format(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Convert OpenAI-style tools to Anthropic format."""
+        anthropic_tools = []
+        for tool in tools:
+            if tool.get("type") == "function":
+                func = tool["function"]
+                anthropic_tools.append({
+                    "name": func["name"],
+                    "description": func.get("description", f"Execute {func['name']}"),
+                    "input_schema": func.get("parameters", {})
+                })
+        return anthropic_tools

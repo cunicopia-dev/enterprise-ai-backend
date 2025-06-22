@@ -2,6 +2,7 @@
 Ollama provider implementation.
 """
 import os
+import json
 import uuid
 from typing import Dict, Any, List, Optional, AsyncGenerator
 from datetime import datetime
@@ -103,7 +104,7 @@ class OllamaProvider(BaseProvider):
                     context_window=128000,  # Default context window
                     max_tokens=128000,  # Ollama doesn't provide this, using default
                     supports_streaming=True,
-                    supports_functions=False,
+                    supports_functions=True,
                     capabilities={
                         "chat": True,
                         "code": True,
@@ -116,6 +117,51 @@ class OllamaProvider(BaseProvider):
         except Exception as e:
             await self._handle_error(e, self.name)
             return []
+    
+    def _prepare_messages(self, messages: List[Message]) -> List[Dict[str, Any]]:
+        """
+        Prepare messages for Ollama API, handling structured content.
+        
+        Ollama uses OpenAI-compatible format for tool calling.
+        """
+        ollama_messages = []
+        
+        for msg in messages:
+            # Handle both string and enum roles
+            role_value = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+            
+            # Check if this is a structured message (JSON content)
+            if isinstance(msg.content, str):
+                try:
+                    # Try to parse as structured content
+                    parsed_content = json.loads(msg.content)
+                    if isinstance(parsed_content, dict):
+                        # Check if it's a tool message with name
+                        if role_value == "tool" and "name" in parsed_content:
+                            ollama_messages.append({
+                                "role": "tool",
+                                "content": parsed_content["content"],
+                                "name": parsed_content["name"]
+                            })
+                            continue
+                        # Check if it's an assistant message with tool_calls
+                        elif role_value == "assistant" and "tool_calls" in parsed_content:
+                            ollama_messages.append({
+                                "role": "assistant",
+                                "content": parsed_content["content"] or "",
+                                "tool_calls": parsed_content["tool_calls"]
+                            })
+                            continue
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            
+            # Convert to Ollama format
+            ollama_messages.append({
+                "role": role_value,
+                "content": msg.content
+            })
+        
+        return ollama_messages
     
     async def chat_completion(
         self,
@@ -143,22 +189,32 @@ class OllamaProvider(BaseProvider):
                 if key in kwargs:
                     options[key] = kwargs[key]
             
+            # Prepare chat parameters
+            chat_params = {
+                "model": model,
+                "messages": ollama_messages,
+                "options": options,
+                "stream": False
+            }
+            
+            # Add tools if provided (Ollama supports function calling)
+            if "tools" in kwargs and kwargs["tools"]:
+                chat_params["tools"] = kwargs["tools"]
+            
             # Make the request with timeout
             response = await asyncio.wait_for(
-                self.client.chat(
-                    model=model,
-                    messages=ollama_messages,
-                    options=options,
-                    stream=False
-                ),
+                self.client.chat(**chat_params),
                 timeout=self.timeout
             )
             
-            # Convert to ChatResponse
-            return ChatResponse(
+            # Extract message from response
+            message = response["message"]
+            
+            # Create ChatResponse with tool calls if present
+            chat_response = ChatResponse(
                 id=f"ollama-{uuid.uuid4()}",
                 model=model,
-                content=response["message"]["content"],
+                content=message.get("content", ""),
                 role="assistant",
                 finish_reason="stop",
                 usage={
@@ -168,6 +224,38 @@ class OllamaProvider(BaseProvider):
                 },
                 created_at=datetime.now()
             )
+            
+            # Add tool calls if present (convert to standard format)
+            if "tool_calls" in message and message["tool_calls"]:
+                tool_calls = []
+                for tool_call in message["tool_calls"]:
+                    # Convert Ollama tool call to standard format (Ollama uses dict arguments, not JSON strings)
+                    if hasattr(tool_call, 'function'):
+                        # Object format
+                        arguments = tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else {}
+                        # Convert to JSON string for standard format
+                        tool_calls.append({
+                            "id": f"ollama-{uuid.uuid4()}",  # Ollama doesn't provide IDs
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.function.name,
+                                "arguments": json.dumps(arguments) if isinstance(arguments, dict) else str(arguments)
+                            }
+                        })
+                    elif isinstance(tool_call, dict) and "function" in tool_call:
+                        # Dict format
+                        arguments = tool_call["function"].get("arguments", {})
+                        tool_calls.append({
+                            "id": f"ollama-{uuid.uuid4()}",  # Ollama doesn't provide IDs
+                            "type": "function",
+                            "function": {
+                                "name": tool_call["function"]["name"],
+                                "arguments": json.dumps(arguments) if isinstance(arguments, dict) else str(arguments)
+                            }
+                        })
+                chat_response.tool_calls = tool_calls
+            
+            return chat_response
             
         except asyncio.TimeoutError:
             raise ProviderTimeoutError(
