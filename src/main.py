@@ -14,6 +14,8 @@ from utils.system_prompt_db import SystemPromptManagerDB
 from utils.auth import require_api_key
 from utils.config import config
 from utils.database import get_db, engine, Base
+from utils.mcp import MCPHost, MCPConfigLoader
+from utils.mcp.exceptions import MCPException
 from utils.models.api_models import (
     ChatRequest, 
     SystemPromptRequest, 
@@ -36,12 +38,29 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    run_migration()
+    # run_migration()
+    
+    # Initialize MCP Host
+    if hasattr(app.state, 'mcp_host'):
+        try:
+            await app.state.mcp_host.initialize()
+            logger.info("MCP Host initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize MCP Host: {e}")
+    
     # Initialize provider manager
     if hasattr(app.state, 'provider_manager'):
         await app.state.provider_manager.initialize()
+    
     yield
-    # Shutdown (if needed)
+    
+    # Shutdown
+    if hasattr(app.state, 'mcp_host'):
+        try:
+            await app.state.mcp_host.shutdown()
+            logger.info("MCP Host shutdown complete")
+        except Exception as e:
+            logger.error(f"Error during MCP Host shutdown: {e}")
 
 def create_app():
     # Validate configuration
@@ -50,8 +69,17 @@ def create_app():
     # Create database tables if they don't exist
     Base.metadata.create_all(bind=engine)
     
+    # Initialize MCP Host
+    try:
+        mcp_config = MCPConfigLoader.load_config()
+        mcp_host = MCPHost(mcp_config)
+        logger.info(f"MCP Host created with {len(mcp_config)} server configurations")
+    except Exception as e:
+        logger.warning(f"Failed to create MCP Host: {e}. MCP functionality will be disabled.")
+        mcp_host = None
+    
     # Initialize the provider manager and chat interface
-    provider_manager = ProviderManager()
+    provider_manager = ProviderManager(mcp_host=mcp_host)
     # For backward compatibility, get the default provider
     # This will be initialized in the lifespan function
     chat_interface = ChatInterfaceDB(provider_manager=provider_manager)
@@ -64,9 +92,10 @@ def create_app():
         lifespan=lifespan
     )
     
-    # Store provider manager and chat interface in app state
+    # Store provider manager, chat interface, and MCP host in app state
     app.state.provider_manager = provider_manager
     app.state.chat_interface = chat_interface
+    app.state.mcp_host = mcp_host
     
     # Initialize rate limiter
     limiter = Limiter(
@@ -94,6 +123,10 @@ def create_app():
                 {"path": "/providers", "description": "List available AI providers", "method": "GET"},
                 {"path": "/providers/{provider}/models", "description": "List models for a provider", "method": "GET"},
                 {"path": "/providers/{provider}/health", "description": "Check provider health", "method": "GET"},
+                {"path": "/mcp/status", "description": "Get MCP integration status", "method": "GET"},
+                {"path": "/mcp/servers", "description": "List MCP servers", "method": "GET"},
+                {"path": "/mcp/tools", "description": "List available MCP tools", "method": "GET"},
+                {"path": "/mcp/servers/{server}/reconnect", "description": "Reconnect to MCP server", "method": "POST"},
                 {"path": "/chat", "description": "Chat with LLM", "method": "POST"},
                 {"path": "/chat/history", "description": "Get chat history", "method": "GET"},
                 {"path": "/chat/history/{chat_id}", "description": "Get specific chat history", "method": "GET"},
@@ -196,6 +229,167 @@ def create_app():
                 status="unhealthy",
                 error=str(e)
             )
+    
+    # MCP Integration endpoints
+    
+    @app.get("/mcp/status")
+    @limiter.limit(f"{config.RATE_LIMIT_PER_HOUR}/hour")
+    async def get_mcp_status(
+        request: Request,
+        auth_data: Tuple[str, uuid.UUID] = Depends(require_api_key)
+    ):
+        """
+        Get MCP integration status.
+        Requires API key authentication.
+        """
+        try:
+            if not app.state.mcp_host:
+                return {
+                    "success": True,
+                    "mcp_enabled": False,
+                    "error": "MCP Host not initialized"
+                }
+            
+            status = app.state.mcp_host.get_status()
+            
+            return {
+                "success": True,
+                "mcp_enabled": True,
+                "mcp_initialized": app.state.mcp_host.is_initialized(),
+                "server_count": len(status),
+                "connected_servers": len(app.state.mcp_host.get_connected_servers()),
+                "total_tools": app.state.mcp_host.get_tool_count(),
+                "total_resources": app.state.mcp_host.get_resource_count(),
+                "total_prompts": app.state.mcp_host.get_prompt_count(),
+                "servers": status
+            }
+        except Exception as e:
+            logger.error(f"Error getting MCP status: {e}")
+            return {
+                "success": False,
+                "mcp_enabled": False,
+                "error": str(e)
+            }
+    
+    @app.get("/mcp/servers")
+    @limiter.limit(f"{config.RATE_LIMIT_PER_HOUR}/hour")
+    async def list_mcp_servers(
+        request: Request,
+        auth_data: Tuple[str, uuid.UUID] = Depends(require_api_key)
+    ):
+        """
+        List all MCP servers and their status.
+        Requires API key authentication.
+        """
+        try:
+            if not app.state.mcp_host:
+                return {
+                    "success": False,
+                    "servers": [],
+                    "error": "MCP Host not initialized"
+                }
+            
+            status = app.state.mcp_host.get_status()
+            
+            return {
+                "success": True,
+                "servers": [
+                    {
+                        "name": server_name,
+                        "status": client_status.status,
+                        "connected_at": client_status.connected_at.isoformat() if client_status.connected_at else None,
+                        "tools_count": client_status.tools_count,
+                        "resources_count": client_status.resources_count,
+                        "prompts_count": client_status.prompts_count,
+                        "error_message": client_status.error_message
+                    }
+                    for server_name, client_status in status.items()
+                ]
+            }
+        except Exception as e:
+            logger.error(f"Error listing MCP servers: {e}")
+            return {
+                "success": False,
+                "servers": [],
+                "error": str(e)
+            }
+    
+    @app.get("/mcp/tools")
+    @limiter.limit(f"{config.RATE_LIMIT_PER_HOUR}/hour")
+    async def list_mcp_tools(
+        request: Request,
+        auth_data: Tuple[str, uuid.UUID] = Depends(require_api_key)
+    ):
+        """
+        List all available MCP tools.
+        Requires API key authentication.
+        """
+        try:
+            if not app.state.mcp_host:
+                return {
+                    "success": False,
+                    "tools": [],
+                    "error": "MCP Host not initialized"
+                }
+            
+            tools = app.state.mcp_host.get_all_tools()
+            
+            return {
+                "success": True,
+                "tools": [
+                    {
+                        "name": tool_name,
+                        "description": tool.description,
+                        "server": tool_name.split("__")[0] if "__" in tool_name else "unknown",
+                        "input_schema": tool.input_schema
+                    }
+                    for tool_name, tool in tools.items()
+                ]
+            }
+        except Exception as e:
+            logger.error(f"Error listing MCP tools: {e}")
+            return {
+                "success": False,
+                "tools": [],
+                "error": str(e)
+            }
+    
+    @app.post("/mcp/servers/{server_name}/reconnect")
+    @limiter.limit(f"{config.RATE_LIMIT_PER_HOUR}/hour")
+    async def reconnect_mcp_server(
+        request: Request,
+        server_name: str,
+        auth_data: Tuple[str, uuid.UUID] = Depends(require_api_key)
+    ):
+        """
+        Reconnect to a specific MCP server.
+        Requires API key authentication.
+        """
+        try:
+            if not app.state.mcp_host:
+                return {
+                    "success": False,
+                    "error": "MCP Host not initialized"
+                }
+            
+            await app.state.mcp_host.reconnect_client(server_name)
+            
+            return {
+                "success": True,
+                "message": f"Successfully reconnected to {server_name}"
+            }
+        except MCPException as e:
+            logger.error(f"Error reconnecting to MCP server {server_name}: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error reconnecting to MCP server {server_name}: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
         
     @app.post("/chat")
     @limiter.limit(f"{config.RATE_LIMIT_PER_HOUR}/hour")
