@@ -7,7 +7,7 @@ temp/
 tmp/
 system_prompts/ 
 system_prompt.txt
-
+mcp_servers_config.json
 
 # C extensions
 *.so
