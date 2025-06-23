@@ -375,6 +375,7 @@ class MCPEnhancedProvider(BaseProvider):
         from .anthropic import AnthropicProvider
         from .openai import OpenAIProvider
         from .ollama import OllamaProvider
+        from .google import GoogleProvider
         
         if isinstance(self.base_provider, AnthropicProvider):
             # For Anthropic, we need to reconstruct the content blocks with text and tool_use
@@ -439,8 +440,19 @@ class MCPEnhancedProvider(BaseProvider):
                 role="assistant",
                 content=json.dumps(assistant_message)  # Will be parsed by Ollama provider
             ))
+        elif isinstance(self.base_provider, GoogleProvider):
+            # For Google, we need to create structured content with function calls
+            google_content = {}
+            if response.content:
+                google_content["content"] = response.content
+            google_content["tool_calls"] = tool_calls
+            
+            messages.append(Message(
+                role="assistant",
+                content=json.dumps(google_content)  # Will be parsed by Google provider
+            ))
         else:
-            # For Google and others, just add the text content
+            # For other providers, just add the text content
             messages.append(Message(role="assistant", content=response.content))
     
     def _add_tool_results_to_messages(self, messages: List[Message], tool_calls: List[Dict[str, Any]], tool_results: List[ToolResult]):
@@ -448,6 +460,7 @@ class MCPEnhancedProvider(BaseProvider):
         from .anthropic import AnthropicProvider
         from .openai import OpenAIProvider
         from .ollama import OllamaProvider
+        from .google import GoogleProvider
         
         if isinstance(self.base_provider, AnthropicProvider):
             # Anthropic requires tool results as user messages with tool_result content blocks
@@ -499,8 +512,22 @@ class MCPEnhancedProvider(BaseProvider):
                         role="tool",
                         content=message_content
                     ))
+                elif isinstance(self.base_provider, GoogleProvider):
+                    # Google uses tool messages with name for function responses
+                    tool_call = tool_calls[i] if i < len(tool_calls) else tool_calls[0]
+                    function_name = tool_call["function"]["name"]
+                    
+                    message_content = json.dumps({
+                        "role": "tool",
+                        "content": str(result.content),
+                        "name": function_name
+                    })
+                    messages.append(Message(
+                        role="tool",
+                        content=message_content
+                    ))
                 else:
-                    # Google and others
+                    # Other providers
                     messages.append(Message(
                         role="tool",
                         content=str(result.content)
