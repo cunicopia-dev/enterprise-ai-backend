@@ -2,6 +2,7 @@
 OpenAI GPT provider implementation.
 """
 import os
+import json
 from typing import List, Dict, Any, Optional, AsyncGenerator
 import asyncio
 from datetime import datetime
@@ -133,9 +134,38 @@ class OpenAIProvider(BaseProvider):
         openai_messages = []
         
         for msg in messages:
+            # Handle both string and enum roles
+            role_value = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+            
+            # Check if this is a structured message (JSON content)
+            if isinstance(msg.content, str):
+                try:
+                    # Try to parse as structured content
+                    parsed_content = json.loads(msg.content)
+                    if isinstance(parsed_content, dict):
+                        # Check if it's a tool message with tool_call_id
+                        if role_value == "tool" and "tool_call_id" in parsed_content:
+                            openai_messages.append({
+                                "role": "tool",
+                                "content": parsed_content["content"],
+                                "tool_call_id": parsed_content["tool_call_id"],
+                                "name": parsed_content.get("name")
+                            })
+                            continue
+                        # Check if it's an assistant message with tool_calls
+                        elif role_value == "assistant" and "tool_calls" in parsed_content:
+                            openai_messages.append({
+                                "role": "assistant",
+                                "content": parsed_content["content"],
+                                "tool_calls": parsed_content["tool_calls"]
+                            })
+                            continue
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            
             # Convert to OpenAI format
             openai_messages.append({
-                "role": msg.role.value,
+                "role": role_value,
                 "content": msg.content
             })
         
@@ -168,6 +198,12 @@ class OpenAIProvider(BaseProvider):
             if max_tokens is not None:
                 request_params["max_tokens"] = max_tokens
             
+            # Add tools if provided (OpenAI supports function calling)
+            if "tools" in kwargs and kwargs["tools"]:
+                request_params["tools"] = kwargs["tools"]  # Already in OpenAI format
+                if "tool_choice" in kwargs:
+                    request_params["tool_choice"] = kwargs["tool_choice"]
+            
             # Add any additional parameters
             if "stop" in kwargs:
                 request_params["stop"] = kwargs["stop"]
@@ -188,12 +224,27 @@ class OpenAIProvider(BaseProvider):
             # Extract the first choice
             choice = response.choices[0]
             
+            # Handle tool calls if present
+            tool_calls = None
+            if hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
+                tool_calls = []
+                for tool_call in choice.message.tool_calls:
+                    tool_calls.append({
+                        "id": tool_call.id,
+                        "type": tool_call.type,
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments
+                        }
+                    })
+            
             return ChatResponse(
                 id=response.id,
                 model=response.model,
                 content=choice.message.content or "",
                 role=choice.message.role,
-                finish_reason=choice.finish_reason
+                finish_reason=choice.finish_reason,
+                tool_calls=tool_calls
             )
             
         except APITimeoutError:
@@ -257,6 +308,12 @@ class OpenAIProvider(BaseProvider):
             # Add max_tokens if specified
             if max_tokens is not None:
                 request_params["max_tokens"] = max_tokens
+            
+            # Add tools if provided (OpenAI supports function calling)
+            if "tools" in kwargs and kwargs["tools"]:
+                request_params["tools"] = kwargs["tools"]  # Already in OpenAI format
+                if "tool_choice" in kwargs:
+                    request_params["tool_choice"] = kwargs["tool_choice"]
             
             # Add any additional parameters
             if "stop" in kwargs:

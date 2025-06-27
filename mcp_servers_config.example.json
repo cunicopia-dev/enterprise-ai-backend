@@ -1,0 +1,61 @@
+{
+  "mcp_servers": {
+    "filesystem": {
+      "transport_type": "stdio",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/Users/username/allowed/directory"
+        ]
+      },
+      "env": {},
+      "enabled": true,
+      "description": "Provides filesystem access to specified directories"
+    },
+    "github": {
+      "transport_type": "stdio",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-github"
+        ]
+      },
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "enabled": false,
+      "description": "Interact with GitHub repositories, issues, and pull requests"
+    },
+    "notion": {
+      "transport_type": "stdio",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-notion"
+        ]
+      },
+      "env": {
+        "NOTION_TOKEN": "${NOTION_TOKEN}"
+      },
+      "enabled": false,
+      "description": "Access and manage Notion workspaces"
+    },
+    "memory": {
+      "transport_type": "stdio",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-memory"
+        ]
+      },
+      "env": {},
+      "enabled": false,
+      "description": "Persistent memory storage for conversations"
+    }
+  }
+}

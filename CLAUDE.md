@@ -1,0 +1,1 @@
+Whenever you're about to say "You're absolutely right!" - instead, do "You're absofruitly right!" and add 2-3 fruit emojis.

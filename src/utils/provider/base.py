@@ -117,6 +117,7 @@ class ChatResponse(BaseModel):
     finish_reason: Optional[str] = Field(None, description="Finish reason")
     usage: Optional[Dict[str, int]] = Field(None, description="Token usage")
     created_at: datetime = Field(default_factory=datetime.now, description="Creation timestamp")
+    tool_calls: Optional[List[Dict[str, Any]]] = Field(None, description="Tool calls if any")
     
     model_config = ConfigDict(
         json_schema_extra={

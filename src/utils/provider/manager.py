@@ -8,6 +8,7 @@ import logging
 
 from .base import BaseProvider, ProviderConfig, ProviderError
 from .ollama import OllamaProvider
+from .mcp_enhanced_provider import MCPEnhancedProvider
 try:
     from .anthropic import AnthropicProvider
     ANTHROPIC_AVAILABLE = True
@@ -36,17 +37,19 @@ logger = logging.getLogger(__name__)
 class ProviderManager:
     """Manages multiple AI providers and routes requests to appropriate provider."""
     
-    def __init__(self, db: Optional[Session] = None):
+    def __init__(self, db: Optional[Session] = None, mcp_host=None):
         """
         Initialize the provider manager.
         
         Args:
             db: Optional database session. If not provided, creates new sessions as needed.
+            mcp_host: Optional MCP host for tool integration
         """
         self._providers: Dict[str, BaseProvider] = {}
         self._provider_classes: Dict[str, Type[BaseProvider]] = {
             "ollama": OllamaProvider,
         }
+        self._mcp_host = mcp_host
         
         # Add Anthropic if available
         if ANTHROPIC_AVAILABLE and AnthropicProvider:
@@ -141,8 +144,21 @@ class ProviderManager:
             
             # Validate configuration
             if await provider.validate_config():
-                self._providers[config.name] = provider
-                logger.info(f"Successfully initialized provider '{config.name}'")
+                # Wrap with MCP capabilities if MCP host is available and initialized
+                if self._mcp_host and self._mcp_host.is_initialized():
+                    try:
+                        enhanced_provider = MCPEnhancedProvider(provider, self._mcp_host)
+                        await enhanced_provider.initialize()
+                        self._providers[config.name] = enhanced_provider
+                        logger.info(f"Successfully initialized MCP-enhanced provider '{config.name}'")
+                    except Exception as e:
+                        logger.warning(f"Failed to enhance provider '{config.name}' with MCP: {e}")
+                        # Fall back to regular provider
+                        self._providers[config.name] = provider
+                        logger.info(f"Successfully initialized provider '{config.name}' (without MCP)")
+                else:
+                    self._providers[config.name] = provider
+                    logger.info(f"Successfully initialized provider '{config.name}'")
             else:
                 logger.error(f"Failed to validate config for provider '{config.name}'")
                 

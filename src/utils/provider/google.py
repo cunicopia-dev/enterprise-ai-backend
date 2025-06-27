@@ -2,6 +2,7 @@
 Google Gemini provider implementation.
 """
 import os
+import json
 from typing import List, Dict, Any, Optional, AsyncGenerator
 import asyncio
 from datetime import datetime
@@ -146,6 +147,7 @@ class GoogleProvider(BaseProvider):
         
         Google Gemini uses a different format:
         - System messages are handled separately as system instructions
+        - Tool calls and results need special formatting
         - Other messages are converted to Content objects
         
         Returns:
@@ -155,13 +157,70 @@ class GoogleProvider(BaseProvider):
         contents = []
         
         for msg in messages:
-            if msg.role == MessageRole.SYSTEM:
+            # Handle both string and enum roles
+            role_value = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+            
+            if msg.role == MessageRole.SYSTEM or role_value == "system":
                 # Google uses system_instruction parameter for system messages
                 system_instruction = msg.content
             else:
+                # Check if this is a structured message (JSON content)
+                if isinstance(msg.content, str):
+                    try:
+                        # Try to parse as structured content
+                        parsed_content = json.loads(msg.content)
+                        if isinstance(parsed_content, dict):
+                            # Handle Google-specific structured content
+                            if role_value == "assistant" and "tool_calls" in parsed_content:
+                                # Assistant message with function calls
+                                parts = []
+                                if parsed_content.get("content"):
+                                    parts.append({"text": parsed_content["content"]})
+                                
+                                # Add function call parts
+                                for tool_call in parsed_content["tool_calls"]:
+                                    function_call = tool_call["function"]
+                                    args = json.loads(function_call["arguments"]) if function_call["arguments"] else {}
+                                    parts.append({
+                                        "function_call": {
+                                            "name": function_call["name"],
+                                            "args": args
+                                        }
+                                    })
+                                
+                                contents.append({
+                                    "role": "model",
+                                    "parts": parts
+                                })
+                                continue
+                            elif role_value == "tool":
+                                # Function result - Google expects this as user message with function_response
+                                tool_content = parsed_content.get("content", str(parsed_content))
+                                function_name = parsed_content.get("name", "unknown_function")
+                                
+                                contents.append({
+                                    "role": "user",
+                                    "parts": [{
+                                        "function_response": {
+                                            "name": function_name,
+                                            "response": {"result": tool_content}
+                                        }
+                                    }]
+                                })
+                                continue
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                
                 # Convert to Google's format
                 # Google uses "user" and "model" roles (not "assistant")
-                role = "user" if msg.role == MessageRole.USER else "model"
+                if role_value == "user":
+                    role = "user"
+                elif role_value in ("assistant", "model"):
+                    role = "model"
+                elif role_value == "tool":
+                    role = "user"  # Tool responses go as user messages in Google
+                else:
+                    role = "user"  # Default fallback
                 
                 content = {
                     "role": role,
@@ -184,16 +243,10 @@ class GoogleProvider(BaseProvider):
             if not self.client:
                 await self.initialize()
             
-            # Prepare messages
+            # Prepare messages for Google's format
             system_instruction, contents = self._prepare_messages_for_google(messages)
             
-            # Create request parameters
-            request_params = {
-                "model": model,
-                "contents": contents,
-            }
-            
-            # Configure generation parameters and system instruction using GenerateContentConfig
+            # Configure generation parameters using GenerateContentConfig
             config_params = {}
             
             # Add system instruction if present
@@ -214,37 +267,71 @@ class GoogleProvider(BaseProvider):
             if "stop_sequences" in kwargs:
                 config_params["stop_sequences"] = kwargs["stop_sequences"]
             
-            # Add config if we have any parameters
-            if config_params:
-                # Import here to avoid circular imports
-                from google.genai.types import GenerateContentConfig
-                request_params["config"] = GenerateContentConfig(**config_params)
+            # Handle tools - Google genai requires actual Python functions, not JSON specs
+            # For MCP integration, we need to disable automatic function calling and handle manually
+            if "tools" in kwargs and kwargs["tools"]:
+                # Create dynamic Python functions from MCP tool specs
+                tool_functions = self._create_python_functions_from_mcp_tools(kwargs["tools"])
+                config_params["tools"] = tool_functions
+                # Disable automatic function calling so we can handle the loop ourselves
+                config_params["automatic_function_calling"] = {"disable": True}
+            
+            # Create the config
+            from google.genai.types import GenerateContentConfig
+            config = GenerateContentConfig(**config_params)
             
             # Make the API call
-            response = self.client.models.generate_content(**request_params)
+            response = self.client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config
+            )
             
-            # Extract the content
+            # Extract the content and function calls
             content = ""
+            tool_calls = []
+            
             if response.candidates and len(response.candidates) > 0:
                 candidate = response.candidates[0]
                 if candidate.content and candidate.content.parts:
                     for part in candidate.content.parts:
                         if hasattr(part, 'text') and part.text:
                             content += part.text
+                        elif hasattr(part, 'function_call'):
+                            # Convert Google function call to standard format
+                            function_call = part.function_call
+                            # Generate unique ID for tool call
+                            tool_call_id = f"google-{len(tool_calls)}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                            tool_calls.append({
+                                "id": tool_call_id,
+                                "type": "function",
+                                "function": {
+                                    "name": function_call.name,
+                                    "arguments": json.dumps(dict(function_call.args)) if function_call.args else "{}"
+                                }
+                            })
             
-            # Determine finish reason
+            # Determine finish reason - for Google, we need to check if there are function calls
             finish_reason = "stop"
-            if response.candidates and len(response.candidates) > 0:
+            if tool_calls:
+                finish_reason = "tool_calls"  # Indicates function calls are pending
+            elif response.candidates and len(response.candidates) > 0:
                 candidate = response.candidates[0]
                 if hasattr(candidate, 'finish_reason'):
-                    finish_reason = str(candidate.finish_reason).lower()
+                    # Map Google finish reasons to standard format
+                    google_reason = str(candidate.finish_reason).lower()
+                    if google_reason in ["stop", "max_tokens", "safety", "recitation"]:
+                        finish_reason = google_reason
+                    else:
+                        finish_reason = "stop"
             
             return ChatResponse(
                 id=getattr(response, 'id', f"google-{datetime.now().isoformat()}"),
                 model=model,
                 content=content,
                 role="assistant",
-                finish_reason=finish_reason
+                finish_reason=finish_reason,
+                tool_calls=tool_calls if tool_calls else None
             )
             
         except Exception as e:
@@ -275,6 +362,59 @@ class GoogleProvider(BaseProvider):
                     f"Google Gemini API error: {str(e)}",
                     provider=self.name
                 )
+
+    def _create_python_functions_from_mcp_tools(self, tools: List[Dict[str, Any]]) -> List[callable]:
+        """Create Python functions from MCP tool specifications for Google genai."""
+        tool_functions = []
+        
+        for tool in tools:
+            if tool.get("type") == "function":
+                func_spec = tool["function"]
+                func_name = func_spec["name"]
+                func_description = func_spec.get("description", f"Execute {func_name}")
+                func_parameters = func_spec.get("parameters", {})
+                
+                # Create a dynamic Python function that matches Google's requirements
+                def create_tool_function(name, description, parameters):
+                    def tool_function(**kwargs):
+                        """Dynamic tool function for MCP integration."""
+                        # This function won't actually execute - we'll handle execution in MCP
+                        # But Google genai needs a real Python function to inspect
+                        return f"Tool {name} called with args: {kwargs}"
+                    
+                    # Set function metadata that Google genai can inspect
+                    tool_function.__name__ = name
+                    tool_function.__doc__ = description
+                    
+                    # Add type annotations based on parameters schema
+                    if parameters.get("properties"):
+                        annotations = {}
+                        for param_name, param_info in parameters["properties"].items():
+                            param_type = param_info.get("type", "string")
+                            # Map JSON schema types to Python types
+                            if param_type == "string":
+                                annotations[param_name] = str
+                            elif param_type == "integer":
+                                annotations[param_name] = int
+                            elif param_type == "number":
+                                annotations[param_name] = float
+                            elif param_type == "boolean":
+                                annotations[param_name] = bool
+                            elif param_type == "array":
+                                annotations[param_name] = list
+                            elif param_type == "object":
+                                annotations[param_name] = dict
+                            else:
+                                annotations[param_name] = str
+                        
+                        annotations["return"] = str
+                        tool_function.__annotations__ = annotations
+                    
+                    return tool_function
+                
+                tool_functions.append(create_tool_function(func_name, func_description, func_parameters))
+        
+        return tool_functions
     
     async def chat_completion_stream(
         self,
@@ -310,6 +450,12 @@ class GoogleProvider(BaseProvider):
                 config_params["temperature"] = temperature
             if max_tokens is not None:
                 config_params["max_output_tokens"] = max_tokens
+            
+            # Add tools if provided (Google supports function calling)
+            if "tools" in kwargs and kwargs["tools"]:
+                request_params["tools"] = self._convert_tools_to_google_format(kwargs["tools"])
+                if "tool_choice" in kwargs:
+                    config_params["function_calling_config"] = {"mode": kwargs["tool_choice"]}
             
             # Add any additional parameters
             if "top_p" in kwargs:
@@ -381,3 +527,20 @@ class GoogleProvider(BaseProvider):
                     f"Google Gemini API error: {str(e)}",
                     provider=self.name
                 )
+
+    def _convert_tools_to_google_format(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Convert OpenAI-style tools to Google Gemini format."""
+        google_tools = [{
+            "function_declarations": []
+        }]
+        
+        for tool in tools:
+            if tool.get("type") == "function":
+                func = tool["function"]
+                google_tools[0]["function_declarations"].append({
+                    "name": func["name"],
+                    "description": func.get("description", f"Execute {func['name']}"),
+                    "parameters": func.get("parameters", {})
+                })
+        
+        return google_tools
