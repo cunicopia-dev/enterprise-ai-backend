@@ -422,7 +422,7 @@ You have access to the following tools through the Model Context Protocol (MCP).
         
         if chat_id:
             # Find chat by custom ID
-            chat = chat_repo.get_by_custom_id_with_messages(chat_id)
+            chat = chat_repo.get_chat_by_custom_id_with_messages(chat_id)
             
             if chat:
                 # Check if user has access (chat belongs to user)
