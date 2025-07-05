@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS provider_configs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) UNIQUE NOT NULL,
     display_name VARCHAR(255) NOT NULL,
-    provider_type VARCHAR(50) NOT NULL CHECK (provider_type IN ('ollama', 'anthropic', 'openai', 'google', 'custom')),
+    provider_type VARCHAR(50) NOT NULL,
     base_url VARCHAR(500),
     api_key_env_var VARCHAR(100),
     is_active BOOLEAN DEFAULT TRUE,

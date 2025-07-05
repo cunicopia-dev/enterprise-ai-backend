@@ -7,13 +7,15 @@ SET search_path TO public;
 -- Insert provider configurations
 INSERT INTO provider_configs (id, name, display_name, provider_type, base_url, api_key_env_var, is_active, is_default, config) VALUES
 -- Ollama (default for backward compatibility)
-(gen_random_uuid(), 'ollama', 'Ollama (Local)', 'ollama', 'http://localhost:11434', NULL, TRUE, TRUE, '{"timeout": 30}'),
+(gen_random_uuid(), 'ollama', 'Ollama (Local)', 'ollama', 'http://host.docker.internal:11434', NULL, TRUE, TRUE, '{"timeout": 30}'),
 -- Anthropic
 (gen_random_uuid(), 'anthropic', 'Anthropic Claude', 'anthropic', 'https://api.anthropic.com', 'ANTHROPIC_API_KEY', TRUE, FALSE, '{"api_version": "2023-06-01", "timeout": 60}'),
 -- OpenAI
 (gen_random_uuid(), 'openai', 'OpenAI GPT', 'openai', 'https://api.openai.com/v1', 'OPENAI_API_KEY', TRUE, FALSE, '{"timeout": 60}'),
 -- Google
-(gen_random_uuid(), 'google', 'Google Gemini', 'google', 'https://generativelanguage.googleapis.com', 'GOOGLE_API_KEY', TRUE, FALSE, '{"timeout": 60}')
+(gen_random_uuid(), 'google', 'Google Gemini', 'google', 'https://generativelanguage.googleapis.com', 'GOOGLE_API_KEY', TRUE, FALSE, '{"timeout": 60}'),
+-- AWS Bedrock
+(gen_random_uuid(), 'bedrock', 'AWS Bedrock', 'bedrock', 'https://bedrock-runtime.us-east-1.amazonaws.com', NULL, TRUE, FALSE, '{"region": "us-east-1", "timeout": 60}')
 ON CONFLICT (name) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     base_url = EXCLUDED.base_url,
@@ -132,6 +134,35 @@ ON CONFLICT (provider_id, model_name) DO UPDATE SET
     supports_functions = EXCLUDED.supports_functions,
     updated_at = CURRENT_TIMESTAMP;
 
+-- Insert AWS Bedrock models
+INSERT INTO provider_models (provider_id, model_name, display_name, description, context_window, max_tokens, supports_streaming, supports_functions) 
+SELECT 
+    pc.id,
+    model.model_name,
+    model.display_name,
+    model.description,
+    model.context_window,
+    model.max_tokens,
+    model.supports_streaming,
+    model.supports_functions
+FROM provider_configs pc
+CROSS JOIN (VALUES 
+    ('anthropic.claude-3-haiku-20240307-v1:0', 'Claude 3 Haiku', 'Fast and cost-effective Claude model', 200000, 4096, TRUE, TRUE),
+    ('anthropic.claude-3-sonnet-20240229-v1:0', 'Claude 3 Sonnet', 'Balanced Claude model for complex tasks', 200000, 4096, TRUE, TRUE),
+    ('anthropic.claude-3-opus-20240229-v1:0', 'Claude 3 Opus', 'Most powerful Claude model', 200000, 4096, TRUE, TRUE),
+    ('anthropic.claude-3-5-sonnet-20240620-v1:0', 'Claude 3.5 Sonnet', 'Enhanced Claude 3.5 Sonnet', 200000, 8192, TRUE, TRUE),
+    ('anthropic.claude-3-5-haiku-20241022-v1:0', 'Claude 3.5 Haiku', 'Latest fast Claude model', 200000, 8192, TRUE, TRUE)
+) AS model(model_name, display_name, description, context_window, max_tokens, supports_streaming, supports_functions)
+WHERE pc.name = 'bedrock'
+ON CONFLICT (provider_id, model_name) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    description = EXCLUDED.description,
+    context_window = EXCLUDED.context_window,
+    max_tokens = EXCLUDED.max_tokens,
+    supports_streaming = EXCLUDED.supports_streaming,
+    supports_functions = EXCLUDED.supports_functions,
+    updated_at = CURRENT_TIMESTAMP;
+
 -- Add capabilities to models
 UPDATE provider_models pm
 SET capabilities = 
@@ -164,6 +195,13 @@ SET capabilities =
             '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "multimodal": true, "experimental": true}'::jsonb
         WHEN pm.model_name LIKE 'gemini%' THEN 
             '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "large_context": true}'::jsonb
+        -- Bedrock models
+        WHEN pm.model_name LIKE 'anthropic.claude-3-opus%' THEN 
+            '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "aws_managed": true}'::jsonb
+        WHEN pm.model_name LIKE 'anthropic.claude-3-5%' THEN 
+            '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "aws_managed": true}'::jsonb
+        WHEN pm.model_name LIKE 'anthropic.claude%' THEN 
+            '{"code": true, "chat": true, "reasoning": true, "vision": true, "analysis": true, "aws_managed": true}'::jsonb
         ELSE 
             '{"code": true, "chat": true, "reasoning": true}'::jsonb
     END
