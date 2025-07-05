@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, Depends, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import uuid
 import logging
@@ -34,6 +35,7 @@ import uvicorn
 from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
+logger.error("=== MAIN.PY MODULE LOADED ===")  # Debug: check if module loads
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -63,6 +65,7 @@ async def lifespan(app: FastAPI):
             logger.error(f"Error during MCP Host shutdown: {e}")
 
 def create_app():
+    print("=== CREATE_APP CALLED ===")  # Debug: check if function called
     # Validate configuration
     config.validate()
     
@@ -91,6 +94,23 @@ def create_app():
         version="1.0.0",
         lifespan=lifespan
     )
+    
+    # CORS configuration - exactly from FastAPI docs
+    origins = [
+        "http://localhost",
+        "http://localhost:8080",
+        "http://localhost:3000",
+    ]
+
+    print(f"Adding CORS middleware with origins: {origins}")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    print("CORS middleware added successfully")
     
     # Store provider manager, chat interface, and MCP host in app state
     app.state.provider_manager = provider_manager
