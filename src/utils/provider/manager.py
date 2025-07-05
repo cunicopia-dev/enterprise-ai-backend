@@ -27,6 +27,12 @@ try:
 except ImportError:
     GOOGLE_AVAILABLE = False
     GoogleProvider = None
+try:
+    from .bedrock import BedrockProvider
+    BEDROCK_AVAILABLE = True
+except ImportError:
+    BEDROCK_AVAILABLE = False
+    BedrockProvider = None
 from utils.database import SessionLocal
 from utils.repository.provider_repository import ProviderRepository
 from utils.models.db_models import ProviderConfig as DBProviderConfig
@@ -62,6 +68,10 @@ class ProviderManager:
         # Add Google if available
         if GOOGLE_AVAILABLE and GoogleProvider:
             self._provider_classes["google"] = GoogleProvider
+        
+        # Add Bedrock if available
+        if BEDROCK_AVAILABLE and BedrockProvider:
+            self._provider_classes["bedrock"] = BedrockProvider
         self._db = db
         self._default_provider: Optional[str] = None
         self._initialized = False
