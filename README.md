@@ -10,10 +10,11 @@ A production-ready FastAPI backend featuring native Model Context Protocol (MCP)
 
 <div align="center">
 
-<img src="https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png" alt="FastAPI" height="50">
-<img src="https://www.postgresql.org/media/img/about/press/elephant.png" alt="PostgreSQL" height="50">
+| FastAPI | PostgreSQL | Python |
+|---------|------------|--------|
+| <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/fastapi/fastapi-original.svg" alt="FastAPI" width="40"> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg" alt="PostgreSQL" width="40"> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" alt="Python" width="40"> |
 
-*Built with FastAPI and PostgreSQL for enterprise-grade performance*
+*Built with modern, enterprise-grade technologies*
 
 </div>
 
