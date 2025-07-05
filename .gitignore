@@ -8,6 +8,7 @@ tmp/
 system_prompts/ 
 system_prompt.txt
 mcp_servers_config.json
+
 streamlit/
 streamlit_new/
 
