@@ -353,6 +353,7 @@ class MCPEnhancedProvider(BaseProvider):
         from .openai import OpenAIProvider  
         from .google import GoogleProvider
         from .ollama import OllamaProvider
+        from .bedrock import BedrockProvider
         
         if isinstance(self.base_provider, AnthropicProvider):
             # Anthropic: stop_reason == "tool_use"
@@ -366,6 +367,9 @@ class MCPEnhancedProvider(BaseProvider):
         elif isinstance(self.base_provider, OllamaProvider):
             # Ollama: always uses done_reason="stop", check for tool_calls presence
             return bool(response.tool_calls)
+        elif isinstance(self.base_provider, BedrockProvider):
+            # Bedrock: stop_reason == "tool_use" and check for tool_calls
+            return response.finish_reason == "tool_use" or bool(response.tool_calls)
         else:
             # Generic fallback: check if tool_calls exist
             return bool(response.tool_calls)
@@ -376,6 +380,7 @@ class MCPEnhancedProvider(BaseProvider):
         from .openai import OpenAIProvider
         from .ollama import OllamaProvider
         from .google import GoogleProvider
+        from .bedrock import BedrockProvider
         
         if isinstance(self.base_provider, AnthropicProvider):
             # For Anthropic, we need to reconstruct the content blocks with text and tool_use
@@ -451,6 +456,32 @@ class MCPEnhancedProvider(BaseProvider):
                 role="assistant",
                 content=json.dumps(google_content)  # Will be parsed by Google provider
             ))
+        elif isinstance(self.base_provider, BedrockProvider):
+            # For Bedrock, we need to reconstruct the content blocks with text and toolUse
+            content_blocks = []
+            
+            # Add text content if present
+            if response.content:
+                content_blocks.append({
+                    "text": response.content
+                })
+            
+            # Add toolUse blocks
+            for tool_call in tool_calls:
+                tool_use_block = {
+                    "toolUse": {
+                        "toolUseId": tool_call["id"],
+                        "name": tool_call["function"]["name"],
+                        "input": json.loads(tool_call["function"]["arguments"]) if tool_call["function"]["arguments"] else {}
+                    }
+                }
+                content_blocks.append(tool_use_block)
+            
+            # Create message with structured content
+            messages.append(Message(
+                role="assistant", 
+                content=json.dumps(content_blocks)  # Will be parsed by Bedrock provider
+            ))
         else:
             # For other providers, just add the text content
             messages.append(Message(role="assistant", content=response.content))
@@ -461,6 +492,7 @@ class MCPEnhancedProvider(BaseProvider):
         from .openai import OpenAIProvider
         from .ollama import OllamaProvider
         from .google import GoogleProvider
+        from .bedrock import BedrockProvider
         
         if isinstance(self.base_provider, AnthropicProvider):
             # Anthropic requires tool results as user messages with tool_result content blocks
@@ -480,6 +512,26 @@ class MCPEnhancedProvider(BaseProvider):
             messages.append(Message(
                 role="user",
                 content=json.dumps(tool_result_content)  # Will be parsed by Anthropic provider
+            ))
+        elif isinstance(self.base_provider, BedrockProvider):
+            # Bedrock requires tool results as user messages with toolResult content blocks
+            tool_result_content = []
+            for i, result in enumerate(tool_results):
+                tool_call = tool_calls[i] if i < len(tool_calls) else tool_calls[0]
+                tool_call_id = tool_call.get('id', 'unknown')
+                
+                tool_result_content.append({
+                    "toolResult": {
+                        "toolUseId": tool_call_id,
+                        "content": [{"text": str(result.content)}],
+                        "status": "error" if (hasattr(result, 'is_error') and result.is_error) else "success"
+                    }
+                })
+            
+            # Create a single user message with all tool results
+            messages.append(Message(
+                role="user",
+                content=json.dumps(tool_result_content)  # Will be parsed by Bedrock provider
             ))
         else:
             # OpenAI and Google use "tool" role messages
