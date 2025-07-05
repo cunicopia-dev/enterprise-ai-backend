@@ -9,8 +9,8 @@
 -- Load seed data
 \i '/app/sql/02_seed_data.sql'
 
--- Grant privileges to the streamlitdemo user
-GRANT ALL PRIVILEGES ON DATABASE postgres TO streamlitdemo;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO streamlitdemo;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO streamlitdemo;
-GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO streamlitdemo;
+-- Grant privileges to the fastapi_user
+GRANT ALL PRIVILEGES ON DATABASE postgres TO fastapi_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO fastapi_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO fastapi_user;
+GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO fastapi_user;
