@@ -67,6 +67,23 @@ class AnthropicProvider(BaseProvider):
             }
         )
     
+    def _initialize_client(self):
+        """Reinitialize client with current API key (synchronous version)."""
+        if not self.api_key:
+            raise ProviderAuthenticationError(
+                f"API key not provided for Anthropic",
+                provider=self.name
+            )
+        
+        self.client = AsyncAnthropic(
+            api_key=self.api_key,
+            timeout=self.timeout,
+            max_retries=self.max_retries,
+            default_headers={
+                "anthropic-version": self.api_version
+            }
+        )
+    
     async def validate_config(self) -> bool:
         """Validate Anthropic configuration by making a test API call."""
         try:

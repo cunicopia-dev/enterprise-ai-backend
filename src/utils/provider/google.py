@@ -74,6 +74,31 @@ class GoogleProvider(BaseProvider):
             
             self.client = genai.Client(api_key=self.api_key)
     
+    def _initialize_client(self):
+        """Reinitialize client with current API key (synchronous version)."""
+        if self.use_vertex:
+            # Use Vertex AI authentication
+            if not self.project_id:
+                raise ProviderAuthenticationError(
+                    "Project ID required for Vertex AI. Set project_id in provider config.",
+                    provider=self.name
+                )
+            
+            self.client = genai.Client(
+                vertexai=True,
+                project=self.project_id,
+                location=self.location
+            )
+        else:
+            # Use API key authentication
+            if not self.api_key:
+                raise ProviderAuthenticationError(
+                    f"API key not provided for Google",
+                    provider=self.name
+                )
+            
+            self.client = genai.Client(api_key=self.api_key)
+    
     async def validate_config(self) -> bool:
         """Validate Google configuration by making a test API call."""
         try:

@@ -73,6 +73,26 @@ class OpenAIProvider(BaseProvider):
         
         self.client = AsyncOpenAI(**client_kwargs)
     
+    def _initialize_client(self):
+        """Reinitialize client with current API key (synchronous version)."""
+        if not self.api_key:
+            raise ProviderAuthenticationError(
+                f"API key not provided for OpenAI",
+                provider=self.name
+            )
+        
+        # Initialize client with configuration
+        client_kwargs = {
+            "api_key": self.api_key,
+            "timeout": self.timeout,
+            "max_retries": self.max_retries,
+        }
+        
+        if self.organization:
+            client_kwargs["organization"] = self.organization
+        
+        self.client = AsyncOpenAI(**client_kwargs)
+    
     async def validate_config(self) -> bool:
         """Validate OpenAI configuration by making a test API call."""
         try:

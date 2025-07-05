@@ -218,7 +218,8 @@ You have access to the following tools through the Model Context Protocol (MCP).
         provider: Optional[str] = None,
         model: Optional[str] = None,
         temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None
+        max_tokens: Optional[int] = None,
+        provider_api_key: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Chat with the LLM using persistent chat history.
@@ -228,6 +229,11 @@ You have access to the following tools through the Model Context Protocol (MCP).
             user_id: User ID (if authenticated)
             chat_id: Chat ID to continue an existing conversation
             db: Database session
+            provider: Provider name (optional)
+            model: Model name (optional)
+            temperature: Temperature for generation (optional)
+            max_tokens: Maximum tokens for generation (optional)
+            provider_api_key: User's API key for the selected provider (optional)
         
         Returns:
             Dict[str, Any]: Dictionary containing response and chat information
@@ -311,8 +317,8 @@ You have access to the following tools through the Model Context Protocol (MCP).
             
             # Get the provider to use
             if self.provider_manager:
-                # Multi-provider support
-                provider_instance = self.provider_manager.get_provider(provider)
+                # Multi-provider support with optional custom API key
+                provider_instance = self.provider_manager.get_provider(provider, provider_api_key)
                 
                 # Store provider/model info with the chat if it's new
                 if created_new_chat and provider:
@@ -552,6 +558,7 @@ You have access to the following tools through the Model Context Protocol (MCP).
         model = request.get("model")
         temperature = request.get("temperature")
         max_tokens = request.get("max_tokens")
+        provider_api_key = request.get("provider_api_key")
         
         # If chat_id is provided, validate it
         if chat_id and not self.is_valid_chat_id(chat_id):
@@ -568,7 +575,8 @@ You have access to the following tools through the Model Context Protocol (MCP).
             provider=provider,
             model=model,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            provider_api_key=provider_api_key
         )
         
         if not response.get("success", False) and "error" in response:

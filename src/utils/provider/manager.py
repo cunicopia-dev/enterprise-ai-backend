@@ -165,12 +165,13 @@ class ProviderManager:
         except Exception as e:
             logger.error(f"Failed to initialize provider '{config.name}': {e}")
     
-    def get_provider(self, name: Optional[str] = None) -> BaseProvider:
+    def get_provider(self, name: Optional[str] = None, api_key: Optional[str] = None) -> BaseProvider:
         """
         Get a provider by name or return the default provider.
         
         Args:
             name: Provider name. If None, returns default provider.
+            api_key: Optional custom API key for the provider.
             
         Returns:
             Provider instance
@@ -191,7 +192,54 @@ class ProviderManager:
         if name not in self._providers:
             raise ProviderError(f"Provider '{name}' not found or not active", provider="manager")
         
+        # If custom API key provided, create a new instance with that key
+        if api_key is not None and name != "ollama":  # Ollama doesn't need API keys
+            return self._create_provider_with_api_key(name, api_key)
+        
         return self._providers[name]
+    
+    def _create_provider_with_api_key(self, provider_name: str, api_key: str) -> BaseProvider:
+        """
+        Create a temporary provider instance with a custom API key.
+        
+        Args:
+            provider_name: Name of the provider
+            api_key: Custom API key
+            
+        Returns:
+            Provider instance with custom API key
+        """
+        if provider_name not in self._provider_classes:
+            raise ProviderError(f"Provider class '{provider_name}' not found", provider="manager")
+        
+        # Get the original config for this provider
+        original_provider = self._providers[provider_name]
+        config_copy = original_provider.config.model_copy()
+        
+        # Create provider instance with custom API key
+        provider_class = self._provider_classes[provider_name]
+        provider = provider_class(config_copy)
+        
+        # Set the custom API key directly
+        provider.api_key = api_key
+        
+        # Reinitialize the client with the new API key
+        if hasattr(provider, '_initialize_client'):
+            provider._initialize_client()
+        
+        # If MCP is available, wrap with MCP enhancement
+        if self._mcp_host is not None:
+            try:
+                from .mcp_enhanced_provider import MCPEnhancedProvider
+                enhanced_provider = MCPEnhancedProvider(provider, self._mcp_host)
+                # Note: We don't await initialize() here since this is sync method
+                # The async initialization will happen on first use
+                return enhanced_provider
+            except Exception as e:
+                logger.warning(f"Failed to enhance provider '{provider_name}' with MCP: {e}")
+                return provider
+        
+        return provider
     
     def list_providers(self) -> List[str]:
         """List all available provider names."""

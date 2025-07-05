@@ -19,6 +19,8 @@ class ChatRequest(BaseModel):
     model: Optional[str] = None  # Model name (e.g., "llama3.1:8b-instruct-q8_0")
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(None, gt=0)
+    # User-provided API key for the selected provider
+    provider_api_key: Optional[str] = None  # Note: Not needed for Ollama (local)
     
     @field_validator('message')
     @classmethod
