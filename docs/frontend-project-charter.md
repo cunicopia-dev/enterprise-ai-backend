@@ -27,30 +27,91 @@ This application serves dual purposes:
 - **Backend Integration**: FastAPI Multi-Provider LLM Platform
 
 ### Architecture Pattern
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    CloudFront (CDN)                        │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                 Static Nuxt 3 App                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │   Pages     │  │ Components  │  │    Composables      │ │
-│  │ (Routes)    │  │   (UI)      │  │  (Logic Layer)      │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │   Stores    │  │ Middleware  │  │    Plugins          │ │
-│  │  (Pinia)    │  │ (Auth/Nav)  │  │ (Firebase/API)      │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│              FastAPI Backend Services                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │    Chat     │  │ Providers   │  │    MCP Remote       │ │
-│  │   Service   │  │   Manager   │  │   Servers           │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+
+```mermaid
+graph TB
+    subgraph "CDN Layer"
+        CF[CloudFront CDN]
+    end
+    
+    subgraph "Frontend Layer - Static Nuxt 3 App"
+        subgraph "UI Components"
+            Pages[Pages<br/>Routes]
+            Components[Components<br/>UI Elements]
+            Layouts[Layouts<br/>Templates]
+        end
+        
+        subgraph "Logic Layer"
+            Composables[Composables<br/>Business Logic]
+            Stores[Pinia Stores<br/>State Management]
+            Middleware[Middleware<br/>Auth & Navigation]
+        end
+        
+        subgraph "Integration Layer"
+            Plugins[Plugins<br/>Firebase & API]
+            Utils[Utils<br/>Helpers]
+        end
+    end
+    
+    subgraph "Backend Layer - FastAPI Services"
+        subgraph "Core Services"
+            Chat[Chat Service<br/>Message Management]
+            Providers[Provider Manager<br/>Multi-LLM Support]
+            Auth[Authentication<br/>User Management]
+        end
+        
+        subgraph "AI Integration"
+            MCP[MCP Host<br/>Tool Integration]
+            LLMs[LLM Providers<br/>Anthropic, OpenAI, Google, Ollama]
+        end
+        
+        subgraph "Data Layer"
+            DB[(PostgreSQL<br/>Database)]
+            Cache[Redis Cache<br/>Session Data]
+        end
+    end
+    
+    subgraph "External Services"
+        Firebase[Firebase Auth<br/>User Authentication]
+        MCPServers[Remote MCP Servers<br/>Tool Capabilities]
+        AIProviders[AI Provider APIs<br/>External LLMs]
+    end
+    
+    %% Connections
+    CF --> Pages
+    CF --> Components
+    
+    Pages --> Composables
+    Components --> Stores
+    Layouts --> Middleware
+    
+    Composables --> Plugins
+    Stores --> Utils
+    
+    Plugins --> Chat
+    Plugins --> Providers
+    Plugins --> Auth
+    
+    Chat --> MCP
+    Providers --> LLMs
+    Auth --> DB
+    
+    MCP --> MCPServers
+    LLMs --> AIProviders
+    
+    Auth --> Firebase
+    Chat --> Cache
+    
+    %% Styling
+    classDef frontend fill:#e1f5fe,color:#000000
+    classDef backend fill:#f3e5f5,color:#000000
+    classDef external fill:#fff3e0,color:#000000
+    classDef data fill:#e8f5e8,color:#000000
+    
+    class Pages,Components,Layouts,Composables,Stores,Middleware,Plugins,Utils frontend
+    class Chat,Providers,Auth,MCP,LLMs backend
+    class Firebase,MCPServers,AIProviders external
+    class DB,Cache data
 ```
 
 ---
@@ -546,23 +607,62 @@ Transform the web application into a powerful desktop distribution tool that ser
 #### Technical Architecture
 
 ##### Electron + FastAPI Integration
-```
-┌─────────────────────────────────────────────────────────┐
-│                Electron Main Process                   │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐ │
-│  │  FastAPI    │  │    MCP      │  │   Static Web    │ │
-│  │  Backend    │  │   Host      │  │     Bundle      │ │
-│  │ (Embedded)  │  │ (Local)     │  │ (Nuxt Build)    │ │
-│  └─────────────┘  └─────────────┘  └─────────────────┘ │
-└─────────────────────────────────────────────────────────┘
-                          │
-┌─────────────────────────────────────────────────────────┐
-│            Local MCP Servers (stdio)                   │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐ │
-│  │ Filesystem  │  │   GitHub    │  │    Custom       │ │
-│  │   Server    │  │   Server    │  │   Servers       │ │
-│  └─────────────┘  └─────────────┘  └─────────────────┘ │
-└─────────────────────────────────────────────────────────┘
+
+```mermaid
+graph TB
+    subgraph "Desktop Application"
+        subgraph "Electron Main Process"
+            FastAPIBackend[🚀 FastAPI Backend<br/>Embedded]
+            MCPHost[🔌 MCP Host<br/>Local]
+            StaticBundle[📦 Static Web Bundle<br/>Nuxt Build]
+            MCPManager[📡 MCP Manager]
+            IPCBridge[🔗 IPC Bridge]
+        end
+        
+        subgraph "Electron Renderer"
+            WebInterface[🌐 Web Interface]
+            ElectronAPI[⚡ Electron APIs]
+        end
+    end
+    
+    subgraph "Local MCP Servers"
+        FileSystem[📂 Filesystem Server<br/>stdio]
+        GitHub[🐙 GitHub Server<br/>stdio]
+        CustomServers[⚙️ Custom Servers<br/>stdio]
+    end
+    
+    subgraph "External Services"
+        AIProviders[🤖 AI Provider APIs]
+        EmailService[📧 Email Capture Service]
+        Analytics[📊 Usage Analytics]
+    end
+    
+    %% Internal connections
+    FastAPIBackend --> MCPHost
+    MCPHost --> MCPManager
+    StaticBundle --> WebInterface
+    WebInterface --> IPCBridge
+    IPCBridge --> ElectronAPI
+    ElectronAPI --> MCPManager
+    
+    %% MCP connections
+    MCPHost --> FileSystem
+    MCPHost --> GitHub
+    MCPHost --> CustomServers
+    
+    %% External connections
+    FastAPIBackend --> AIProviders
+    ElectronAPI --> EmailService
+    ElectronAPI --> Analytics
+    
+    %% Styling
+    classDef desktop fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000000
+    classDef mcp fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000000
+    classDef external fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000000
+    
+    class FastAPIBackend,MCPHost,StaticBundle,MCPManager,IPCBridge,WebInterface,ElectronAPI desktop
+    class FileSystem,GitHub,CustomServers mcp
+    class AIProviders,EmailService,Analytics external
 ```
 
 ##### Core Implementation Components
