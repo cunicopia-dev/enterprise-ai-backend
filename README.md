@@ -350,11 +350,8 @@ Edit `mcp_servers_config.json` to configure MCP servers:
 ### Development Mode
 
 ```bash
-# Terminal 1: Start the backend
+# Start the backend with auto-reload
 uvicorn src.main:app --reload
-
-# Terminal 2: Start the frontend
-cd streamlit && ./run.sh
 ```
 
 ### Production Mode with Docker
@@ -365,8 +362,8 @@ docker-compose up
 
 Services will be available at:
 - **API**: http://localhost:8000
-- **Streamlit UI**: http://localhost:8501
 - **API Documentation**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
 ## API Documentation
 
