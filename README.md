@@ -1,8 +1,21 @@
 # FastAPI Multi-Provider LLM Platform with MCP Integration
 
+[![Python](https://img.shields.io/badge/Python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-00a393.svg)](https://fastapi.tiangolo.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-316192.svg)](https://www.postgresql.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
+
 A production-ready FastAPI backend featuring native Model Context Protocol (MCP) support, multi-provider LLM integration, PostgreSQL database, and comprehensive REST API endpoints.
 
-![FastAPI](https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png)
+<div align="center">
+
+<img src="https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png" alt="FastAPI" height="80">
+<img src="https://www.postgresql.org/media/img/about/press/elephant.png" alt="PostgreSQL" height="80">
+
+*Built with FastAPI and PostgreSQL for enterprise-grade performance*
+
+</div>
 
 ## 🚀 Key Features
 
@@ -72,19 +85,25 @@ cd fast-api-agents
 cp .env.example .env
 cp mcp_servers_config.example.json mcp_servers_config.json
 
-# 3. Start everything with Docker
-docker-compose up
+# 3. Install dependencies and set up database
+pip install -r requirements.fastapi.txt
+createuser -U postgres fastapi_user
+createdb -U postgres fastapi_db
+psql -U fastapi_user -d fastapi_db -f sql/setup.sql
 
-# 4. Access the API
+# 4. Start the application
+python src/main.py
+
+# 5. Access the API
 # API: http://localhost:8000
 # Docs: http://localhost:8000/docs
 ```
 
 That's it! The application will:
-- ✅ Set up PostgreSQL database automatically
-- ✅ Initialize all tables and seed data
+- ✅ Connect to your PostgreSQL database
 - ✅ Start the FastAPI backend with MCP support
 - ✅ Connect to configured MCP servers
+- ✅ Provide interactive API documentation
 
 ### First Steps
 
@@ -99,76 +118,111 @@ The application follows a sophisticated multi-layer architecture with MCP at its
 
 ```mermaid
 graph TB
-    subgraph "Client Layer"
-        Client[API Clients]
-        WebApp[Web Applications]
-        Mobile[Mobile Apps]
-        CLI[CLI Tools]
+    subgraph "Client Applications"
+        WebClients[🌐 Web Apps]
+        MobileClients[📱 Mobile Apps]
+        CLIClients[⚡ CLI Tools]
+        APIClients[🔧 API Clients]
     end
     
-    subgraph "API Layer"
-        FastAPI[FastAPI Application]
-        Auth[Authentication<br/>Middleware]
-        RateLimit[Rate Limiting<br/>Middleware]
-    end
-    
-    subgraph "MCP Integration Layer"
-        MCPHost[MCP Host]
-        MCPClients[MCP Clients Pool]
-        MCPEnhanced[MCP Enhanced<br/>Providers]
+    subgraph "FastAPI Backend"
+        subgraph "API Layer"
+            FastAPI[🚀 FastAPI Application]
+            Auth[🔐 Authentication]
+            RateLimit[⏱️ Rate Limiting]
+            CORS[🌍 CORS Middleware]
+        end
         
-        MCPHost --> MCPClients
-        MCPEnhanced --> MCPHost
-    end
-    
-    subgraph "Business Logic Layer"
-        ChatInterface[Chat Interface]
-        ProviderMgr[Provider Manager]
+        subgraph "Business Logic"
+            ChatService[💬 Chat Service]
+            UserService[👤 User Management]
+            ProviderMgr[🤖 Provider Manager]
+        end
+        
+        subgraph "MCP Integration"
+            MCPHost[🔌 MCP Host]
+            MCPClients[📡 MCP Clients]
+            ToolRouter[🛠️ Tool Router]
+        end
         
         subgraph "LLM Providers"
-            Anthropic[Anthropic<br/>Claude]
-            OpenAI[OpenAI<br/>GPT]
-            Google[Google<br/>Gemini]
-            Ollama[Ollama<br/>Local]
+            Anthropic[🧠 Anthropic Claude]
+            OpenAI[🎯 OpenAI GPT]
+            Google[🌟 Google Gemini]
+            Ollama[🏠 Ollama Local]
         end
     end
     
-    subgraph "MCP Servers"
-        FileSystem[Filesystem<br/>Server]
-        GitHub[GitHub<br/>Server]
-        Notion[Notion<br/>Server]
-        Custom[Custom<br/>Servers]
+    subgraph "External Services"
+        subgraph "MCP Servers"
+            FileSystem[📂 Filesystem]
+            GitHub[🐙 GitHub]
+            Notion[📝 Notion]
+            CustomMCP[⚙️ Custom Servers]
+        end
+        
+        subgraph "AI APIs"
+            AnthropicAPI[Anthropic API]
+            OpenAIAPI[OpenAI API]
+            GoogleAPI[Google API]
+        end
     end
     
     subgraph "Data Layer"
-        PostgreSQL[(PostgreSQL)]
-        Users[Users]
-        Chats[Chats]
-        Messages[Messages]
-        Providers[Providers]
-        Usage[Usage Tracking]
+        PostgreSQL[(🐘 PostgreSQL)]
+        Tables[📊 Users, Chats, Messages, Usage]
     end
     
-    %% Connections
-    Client --> FastAPI
-    WebApp --> FastAPI
-    Mobile --> FastAPI
-    CLI --> FastAPI
-    FastAPI --> Auth
-    FastAPI --> ChatInterface
-    ChatInterface --> ProviderMgr
-    ProviderMgr --> MCPEnhanced
-    MCPEnhanced --> Anthropic
-    MCPEnhanced --> OpenAI
-    MCPEnhanced --> Google
-    MCPEnhanced --> Ollama
-    MCPHost --> FileSystem
-    MCPHost --> GitHub
-    MCPHost --> Notion
-    MCPHost --> Custom
+    %% Client connections
+    WebClients --> FastAPI
+    MobileClients --> FastAPI
+    CLIClients --> FastAPI
+    APIClients --> FastAPI
     
-    ChatInterface --> PostgreSQL
-    ProviderMgr --> PostgreSQL
+    %% Internal API flow
+    FastAPI --> Auth
+    FastAPI --> RateLimit
+    FastAPI --> ChatService
+    ChatService --> ProviderMgr
+    ProviderMgr --> MCPHost
+    
+    %% MCP connections
+    MCPHost --> MCPClients
+    MCPClients --> FileSystem
+    MCPClients --> GitHub
+    MCPClients --> Notion
+    MCPClients --> CustomMCP
+    
+    %% Provider connections
+    ProviderMgr --> Anthropic
+    ProviderMgr --> OpenAI
+    ProviderMgr --> Google
+    ProviderMgr --> Ollama
+    
+    %% External API connections
+    Anthropic --> AnthropicAPI
+    OpenAI --> OpenAIAPI
+    Google --> GoogleAPI
+    
+    %% Database connections
+    ChatService --> PostgreSQL
+    UserService --> PostgreSQL
+    Auth --> PostgreSQL
+    
+    %% Styling
+    classDef client fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000000
+    classDef api fill:#f1f8e9,stroke:#689f38,stroke-width:2px,color:#000000
+    classDef mcp fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000000
+    classDef provider fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000000
+    classDef external fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000000
+    classDef data fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#000000
+    
+    class WebClients,MobileClients,CLIClients,APIClients client
+    class FastAPI,Auth,RateLimit,CORS,ChatService,UserService api
+    class MCPHost,MCPClients,ToolRouter,FileSystem,GitHub,Notion,CustomMCP mcp
+    class ProviderMgr,Anthropic,OpenAI,Google,Ollama provider
+    class AnthropicAPI,OpenAIAPI,GoogleAPI external
+    class PostgreSQL,Tables data
 ```
 
 ### Core Components
@@ -289,13 +343,17 @@ Each provider has unique tool calling formats, all handled transparently:
 
 4. **Set up the database**
    ```bash
-   # Using Docker (recommended)
-   docker-compose up -d postgres
-   
-   # Or manually
+   # Create PostgreSQL user and database
    createuser -U postgres fastapi_user
    createdb -U postgres fastapi_db
    psql -U fastapi_user -d fastapi_db -f sql/setup.sql
+   
+   # Optional: Use Docker for PostgreSQL
+   docker run --name postgres-db \
+     -e POSTGRES_USER=fastapi_user \
+     -e POSTGRES_PASSWORD=your-password \
+     -e POSTGRES_DB=fastapi_db \
+     -p 5432:5432 -d postgres:15
    ```
 
 5. **Configure MCP servers**
@@ -351,13 +409,17 @@ Edit `mcp_servers_config.json` to configure MCP servers:
 
 ```bash
 # Start the backend with auto-reload
-uvicorn src.main:app --reload
+python src/main.py
 ```
 
-### Production Mode with Docker
+### Production Mode
 
 ```bash
-docker-compose up
+# Install Gunicorn for production
+pip install gunicorn
+
+# Start with Gunicorn
+gunicorn src.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 ```
 
 Services will be available at:
@@ -576,9 +638,8 @@ MIT License - see LICENSE file for details.
 │   ├── integration/                # Integration tests
 │   └── conftest.py                 # Test fixtures
 ├── mcp_servers_config.json         # MCP server configurations
-├── requirements.txt                # Backend dependencies
+├── requirements.fastapi.txt        # Backend dependencies
 ├── requirements.test.txt           # Testing dependencies
-├── docker-compose.yml              # Docker orchestration
 ├── .env.example                    # Environment template
 └── README.md                       # This file
 ```
