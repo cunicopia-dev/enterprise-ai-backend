@@ -125,10 +125,7 @@ class ProviderConfig(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
-    # Check constraint for provider type
-    __table_args__ = (
-        CheckConstraint(provider_type.in_(["ollama", "anthropic", "openai", "google", "custom"])),
-    )
+    # No restrictive constraints - let providers be flexible
     
     # Relationships
     models = relationship("ProviderModel", back_populates="provider", cascade="all, delete-orphan")
