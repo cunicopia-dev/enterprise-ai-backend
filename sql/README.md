@@ -1,28 +1,28 @@
 # Database Setup Instructions
 
-This directory contains SQL scripts for setting up the PostgreSQL database for the FastAPI/Streamlit chat application.
+This directory contains SQL scripts for setting up the PostgreSQL database for the FastAPI chat application.
 
 ## Connection Details
 
 - **Host**: localhost
 - **Port**: 5432
 - **Database**: postgres
-- **Username**: streamlitdemo
-- **Password**: streamlitdemo
+- **Username**: fastapi_user
+- **Password**: fastapi_password
 
 ## Running the Scripts
 
 1. To set up the database schema and initial data, run:
 
 ```bash
-psql -U streamlitdemo -d postgres -f setup.sql
+psql -U fastapi_user -d postgres -f setup.sql
 ```
 
 2. Alternatively, run each script in sequence:
 
 ```bash
-psql -U streamlitdemo -d postgres -f 01_schema.sql
-psql -U streamlitdemo -d postgres -f 02_seed_data.sql
+psql -U fastapi_user -d postgres -f 01_schema.sql
+psql -U fastapi_user -d postgres -f 02_seed_data.sql
 ```
 
 ## Schema Overview
