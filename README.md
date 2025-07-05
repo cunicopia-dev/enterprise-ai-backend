@@ -1,6 +1,6 @@
 # FastAPI Multi-Provider LLM Platform with MCP Integration
 
-A production-ready FastAPI application featuring native Model Context Protocol (MCP) support, multi-provider LLM integration, PostgreSQL database, and comprehensive API endpoints with a modern Streamlit frontend.
+A production-ready FastAPI backend featuring native Model Context Protocol (MCP) support, multi-provider LLM integration, PostgreSQL database, and comprehensive REST API endpoints.
 
 ![FastAPI](https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png)
 
@@ -75,9 +75,8 @@ cp mcp_servers_config.example.json mcp_servers_config.json
 # 3. Start everything with Docker
 docker-compose up
 
-# 4. Access the application
+# 4. Access the API
 # API: http://localhost:8000
-# UI: http://localhost:8501
 # Docs: http://localhost:8000/docs
 ```
 
@@ -85,15 +84,14 @@ That's it! The application will:
 - ✅ Set up PostgreSQL database automatically
 - ✅ Initialize all tables and seed data
 - ✅ Start the FastAPI backend with MCP support
-- ✅ Launch the Streamlit frontend
 - ✅ Connect to configured MCP servers
 
 ### First Steps
 
 1. **Get your API key**: Check the logs or use the default from `.env`
-2. **Open the UI**: Navigate to http://localhost:8501
-3. **Start chatting**: Select a provider and model, then send a message
-4. **Try MCP tools**: Ask "Create a test file and read it back"
+2. **Test the API**: Use the interactive docs at http://localhost:8000/docs
+3. **Send a request**: Try the `/chat` endpoint with your API key
+4. **Try MCP tools**: Send "Create a test file and read it back"
 
 ## Architecture Overview
 
@@ -101,11 +99,11 @@ The application follows a sophisticated multi-layer architecture with MCP at its
 
 ```mermaid
 graph TB
-    subgraph "Frontend Layer"
-        UI[Streamlit UI]
-        UI_Chat[Chat Module]
-        UI_Prompts[Prompts Module]
-        UI_MCP[MCP Status Module]
+    subgraph "Client Layer"
+        Client[API Clients]
+        WebApp[Web Applications]
+        Mobile[Mobile Apps]
+        CLI[CLI Tools]
     end
     
     subgraph "API Layer"
@@ -152,7 +150,10 @@ graph TB
     end
     
     %% Connections
-    UI --> FastAPI
+    Client --> FastAPI
+    WebApp --> FastAPI
+    Mobile --> FastAPI
+    CLI --> FastAPI
     FastAPI --> Auth
     FastAPI --> ChatInterface
     ChatInterface --> ProviderMgr
@@ -277,7 +278,6 @@ Each provider has unique tool calling formats, all handled transparently:
 2. **Install Python dependencies**
    ```bash
    pip install -r requirements.fastapi.txt
-   pip install -r requirements.streamlit.txt
    pip install -r requirements.test.txt  # Optional, for testing
    ```
 
@@ -293,9 +293,9 @@ Each provider has unique tool calling formats, all handled transparently:
    docker-compose up -d postgres
    
    # Or manually
-   createuser -U postgres streamlitdemo
-   createdb -U postgres postgres
-   psql -U streamlitdemo -d postgres -f sql/setup.sql
+   createuser -U postgres fastapi_user
+   createdb -U postgres fastapi_db
+   psql -U fastapi_user -d fastapi_db -f sql/setup.sql
    ```
 
 5. **Configure MCP servers**
@@ -316,9 +316,9 @@ API_KEY=your-secure-api-key-here
 # Database Configuration
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=postgres
-DB_USER=streamlitdemo
-DB_PASSWORD=streamlitdemo
+DB_NAME=fastapi_db
+DB_USER=fastapi_user
+DB_PASSWORD=your-secure-password
 
 # LLM Provider API Keys
 ANTHROPIC_API_KEY=your-anthropic-api-key
@@ -516,7 +516,7 @@ tests/
 - **Ollama**: Check if service is running (`ollama list`)
 
 ### Database Issues
-- Reset database: `psql -U streamlitdemo -d postgres -f sql/setup.sql`
+- Reset database: `psql -U fastapi_user -d fastapi_db -f sql/setup.sql`
 - Check connections: `pg_isready -h localhost -p 5432`
 - Verify migrations: Check `alembic_version` table
 
@@ -563,12 +563,6 @@ MIT License - see LICENSE file for details.
 │       ├── config.py               # Application configuration
 │       ├── database.py             # Database connection
 │       └── system_prompt_db.py     # System prompt management
-├── streamlit/                      # Frontend application
-│   ├── app.py                      # Main Streamlit app
-│   └── modules/                    # UI modules
-│       ├── chat.py                 # Chat interface
-│       ├── prompts.py              # System prompt management
-│       └── sidebar.py              # Navigation and settings
 ├── docs/                           # Documentation
 │   ├── mcp-multi-provider-implementation-report.md
 │   ├── mcp-client-architecture.md
@@ -585,8 +579,7 @@ MIT License - see LICENSE file for details.
 │   ├── integration/                # Integration tests
 │   └── conftest.py                 # Test fixtures
 ├── mcp_servers_config.json         # MCP server configurations
-├── requirements.fastapi.txt        # Backend dependencies
-├── requirements.streamlit.txt      # Frontend dependencies
+├── requirements.txt                # Backend dependencies
 ├── requirements.test.txt           # Testing dependencies
 ├── docker-compose.yml              # Docker orchestration
 ├── .env.example                    # Environment template
@@ -597,5 +590,4 @@ MIT License - see LICENSE file for details.
 
 - [Model Context Protocol](https://github.com/modelcontextprotocol) by Anthropic
 - [FastAPI](https://fastapi.tiangolo.com/) for the incredible framework
-- [Streamlit](https://streamlit.io/) for the intuitive UI
 - All LLM providers for their amazing models
