@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${DB_USER:-fastapi_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fastapi_password}
+      POSTGRES_DB: ${DB_NAME:-fastapi_db}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    ports:
+      - "5435:5432"
+    restart: unless-stopped
+
+  fastapi:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    environment:
+      - DB_HOST=postgres
+      - DB_USER=${DB_USER:-fastapi_user}
+      - DB_PASSWORD=${DB_PASSWORD:-fastapi_password}
+      - DB_NAME=${DB_NAME:-fastapi_db}
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    env_file:
+      - .env
+    volumes:
+      - ./chats:/app/chats
+      - ./tmp:/app/tmp
+      - ./backups:/app/backups
+      - ./scripts:/app/scripts
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.aws:/root/.aws:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

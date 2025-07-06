@@ -42,11 +42,7 @@ class ChatRequest(BaseModel):
     @field_validator('provider')
     @classmethod
     def validate_provider(cls, v):
-        if v is not None:
-            # Only allow known provider names
-            allowed_providers = ['ollama', 'anthropic', 'openai', 'google']
-            if v not in allowed_providers:
-                raise ValueError(f'Invalid provider: must be one of {allowed_providers}')
+        # Allow any provider - let the system be flexible
         return v
 
 class ChatResponse(BaseModel):

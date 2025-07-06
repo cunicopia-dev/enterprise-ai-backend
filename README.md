@@ -71,7 +71,7 @@ A production-ready FastAPI backend featuring native Model Context Protocol (MCP)
 
 ## Quick Start
 
-Get up and running in 5 minutes:
+Get up and running in 5 minutes with Docker:
 
 ```bash
 # 1. Clone and enter the repository
@@ -82,6 +82,18 @@ cd fast-api-agents
 cp .env.example .env
 cp mcp_servers_config.example.json mcp_servers_config.json
 
+# 3. Start with Docker Compose
+docker-compose up -d
+
+# 4. Access the API
+# API: http://localhost:8000
+# Docs: http://localhost:8000/docs
+# PostgreSQL: localhost:5435
+```
+
+**Or run locally without Docker:**
+
+```bash
 # 3. Install dependencies and set up database
 pip install -r requirements.fastapi.txt
 createuser -U postgres fastapi_user
@@ -90,15 +102,11 @@ psql -U fastapi_user -d fastapi_db -f sql/setup.sql
 
 # 4. Start the application
 python src/main.py
-
-# 5. Access the API
-# API: http://localhost:8000
-# Docs: http://localhost:8000/docs
 ```
 
 That's it! The application will:
 - ✅ Connect to your PostgreSQL database
-- ✅ Start the FastAPI backend with MCP support
+- ✅ Start the FastAPI backend with MCP support  
 - ✅ Connect to configured MCP servers
 - ✅ Provide interactive API documentation
 
@@ -313,6 +321,11 @@ Each provider has unique tool calling formats, all handled transparently:
 
 ### Prerequisites
 
+**For Docker (Recommended):**
+- Docker and Docker Compose
+- [Ollama](https://ollama.ai/download) (optional, for local models)
+
+**For Local Development:**
 - Python 3.13+
 - PostgreSQL 15+
 - Node.js (for MCP servers)
@@ -340,17 +353,13 @@ Each provider has unique tool calling formats, all handled transparently:
 
 4. **Set up the database**
    ```bash
-   # Create PostgreSQL user and database
+   # Option 1: Use Docker Compose (recommended)
+   docker-compose up -d postgres
+   
+   # Option 2: Local PostgreSQL setup
    createuser -U postgres fastapi_user
    createdb -U postgres fastapi_db
    psql -U fastapi_user -d fastapi_db -f sql/setup.sql
-   
-   # Optional: Use Docker for PostgreSQL
-   docker run --name postgres-db \
-     -e POSTGRES_USER=fastapi_user \
-     -e POSTGRES_PASSWORD=your-password \
-     -e POSTGRES_DB=fastapi_db \
-     -p 5432:5432 -d postgres:15
    ```
 
 5. **Configure MCP servers**
@@ -402,7 +411,20 @@ Edit `mcp_servers_config.json` to configure MCP servers:
 
 ## Running the Application
 
-### Development Mode
+### Docker Mode (Recommended)
+
+```bash
+# Start with Docker Compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Development Mode (Local)
 
 ```bash
 # Start the backend with auto-reload
